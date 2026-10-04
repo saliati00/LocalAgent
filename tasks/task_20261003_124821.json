@@ -1,0 +1,21 @@
+{
+  "status": "cancelled",
+  "current_phase": "FASE 2 — 14B",
+  "current_step": "Ação cancelada",
+  "next_action": null,
+  "actions_completed": [
+    "get_project_status: {}",
+    "get_memory: {'category': 'environment'}",
+    "get_memory: {'category': 'progress'}",
+    "run_command: {'command': 'ollama list', 'reason': 'Listar modelos disponíveis para escolher o modelo 14B candidato.'}",
+    "update_spec_checklist: {'item': 'Escolher modelo 14B candidato', 'completed': True}"
+  ],
+  "tool_calls": 8,
+  "successful_tools": 7,
+  "failed_tools": 1,
+  "last_tool": "run_command",
+  "last_tool_success": false,
+  "last_failure_reason": "Execução recusada ou cancelada pelo usuário.",
+  "is_blocked": false,
+  "steps": 18
+}

@@ -1,0 +1,21 @@
+{
+  "status": "failed",
+  "current_phase": "FASE 2 — SMART — Seleção do Modelo Especialista",
+  "current_step": "Tarefa falhou",
+  "next_action": null,
+  "actions_completed": [
+    "get_model_registry: {'role': 'smart'}",
+    "get_memory: {'category': 'decisions', 'key': 'smart_candidate'}",
+    "get_project_status: {}",
+    "get_memory: {'category': 'decisions'}",
+    "register_model_candidate: {'size_gb': 9, 'vram_gb': 8, 'context_window': 32768, 'description': 'Modelo especialista em código, raciocínio arquitetural e refatorações complexas.', 'justification': 'Especialização em programação e raciocínio técnico. Compatível com RTX 3070 8GB VRAM operando com offload parcial em RAM. Candidato SMART — aguardando benchmark para adoção formal.', 'name': 'qwen2.5-coder:14b', 'role': 'smart', 'backend': 'ollama'}"
+  ],
+  "tool_calls": 26,
+  "successful_tools": 26,
+  "failed_tools": 0,
+  "last_tool": "get_model_registry",
+  "last_tool_success": true,
+  "last_failure_reason": null,
+  "is_blocked": false,
+  "steps": 57
+}

@@ -1,0 +1,38 @@
+{
+  "active_fast_model": "qwen3:8b",
+  "active_smart_model": null,
+  "models": {
+    "qwen3:8b": {
+      "name": "Qwen3 8B",
+      "role": "fast",
+      "backend": "ollama",
+      "size_gb": 5.2,
+      "vram_gb": 5.5,
+      "context_window": 32768,
+      "status": "installed",
+      "description": "Modelo operador rápido para tarefas rotineiras, ferramentas básicas e inspeção."
+    },
+    "qwen2.5-coder:14b": {
+      "name": "qwen2.5-coder:14b",
+      "role": "smart",
+      "backend": "ollama",
+      "size_gb": 9.0,
+      "vram_gb": 8.0,
+      "context_window": 32768,
+      "status": "candidate",
+      "description": "Modelo especialista em código, raciocínio arquitetural e refatorações complexas.",
+      "justification": "Especialização em programação e raciocínio técnico. Compatível com RTX 3070 8GB VRAM operando com offload parcial em RAM. Candidato SMART — aguardando benchmark para adoção formal."
+    },
+    "qwen2.5:14b": {
+      "name": "Qwen 2.5 14B",
+      "role": "smart",
+      "backend": "ollama",
+      "size_gb": 9.0,
+      "vram_gb": 8.0,
+      "context_window": 32768,
+      "status": "candidate",
+      "description": "Modelo de raciocínio geral e planejamento para tarefas longas e pesquisa.",
+      "justification": "Candidato SMART para raciocínio geral. Compatível com RTX 3070 8GB com offload parcial. Aguardando benchmark comparativo antes de adoção."
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "status": "failed",
+  "current_phase": "FASE 2 — SMART — Seleção do Modelo Especialista",
+  "current_step": "Tarefa falhou",
+  "next_action": null,
+  "actions_completed": [
+    "get_model_registry: {'role': 'smart'}",
+    "get_memory: {'category': 'decisions', 'key': 'smart_candidate'}",
+    "get_project_status: {}",
+    "save_memory: {'key': 'smart_candidate', 'value': 'qwen2.5-coder:14b', 'description': 'Candidato SMART selecionado para benchmark: qwen2.5-coder:14b devido à sua especialização em programação, refatoração de código e raciocínio técnico.', 'category': 'decisions'}",
+    "save_memory: {'category': 'decisions', 'key': 'smart_candidate', 'value': 'qwen2.5-coder:14b', 'description': 'Candidato SMART selecionado para benchmark: qwen2.5-coder:14b devido à sua especialização em programação, refatoração de código e raciocínio técnico.'}",
+    "save_memory: {'category': 'decisions', 'key': 'smart_candidate', 'value': 'qwen2.5-coder:14b', 'description': 'Candidato SMART selecionado com base em especialização em programação e raciocínio técnico, compatível com a GPU RTX 3070 8GB com offload parcial.'}",
+    "get_memory: {'key': 'smart_candidate', 'category': 'decisions'}",
+    "run_command: {'command': 'ollama list', 'reason': 'Verificar modelos instalados no Ollama para confirmar disponibilidade do candidato qwen2.5-coder:14b'}"
+  ],
+  "tool_calls": 24,
+  "successful_tools": 22,
+  "failed_tools": 2,
+  "last_tool": "get_project_status",
+  "last_tool_success": true,
+  "last_failure_reason": null,
+  "is_blocked": false,
+  "steps": 55
+}
