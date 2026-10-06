@@ -160,10 +160,25 @@ try {
         Say "  (simulacao) python -m venv .venv" "Yellow"
         Say "  (simulacao) pip install -r requirements-dev.txt" "Yellow"
     } else {
-        if (-not (Test-Path $venvPython)) {
-            Invoke-Python $python @("-m", "venv", ".venv")
+        $venvOk = $false
+
+        if (Test-Path $venvPython) {
+            # Um .venv copiado de outro computador existe, mas nao funciona aqui.
+            try {
+                & $venvPython -c "import sys" *> $null
+                $venvOk = ($LASTEXITCODE -eq 0)
+            } catch { $venvOk = $false }
+        }
+
+        if ($venvOk) {
+            Say "  Ambiente .venv ja existe e funciona, reaproveitando." "Green"
         } else {
-            Say "  Ambiente .venv ja existe, reaproveitando." "Green"
+            if (Test-Path (Join-Path $Root ".venv")) {
+                Say "  O .venv existente nao funciona neste computador. Recriando..." "Yellow"
+                Remove-Item -Recurse -Force (Join-Path $Root ".venv")
+            }
+
+            Invoke-Python $python @("-m", "venv", ".venv")
         }
 
         & $venvPython -m pip install --disable-pip-version-check --upgrade pip

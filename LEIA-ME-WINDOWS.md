@@ -22,6 +22,7 @@ Copie a pasta **LocalAgent** inteira para algum lugar fácil, por exemplo `C:\Lo
 (Pode vir de pendrive, nuvem ou do GitHub: no GitHub, botão verde **Code** → **Download ZIP**, e depois clique com o botão direito no ZIP → **Extrair tudo**.)
 
 > Evite pastas dentro do OneDrive ou com nomes muito longos.
+> Se a pasta tiver uma subpasta chamada **.venv** vinda de outro computador, pode apagar: o instalador cria de novo (e recria sozinho se ela estiver quebrada).
 
 ### Passo 2 — Instalar tudo
 1. Abra a pasta LocalAgent.
