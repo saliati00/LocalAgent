@@ -1301,5 +1301,11 @@ Orientações:
 # =========================================================
 
 if __name__ == "__main__":
-    prompt = input("Tarefa: ")
-    agent(prompt)
+    while True:
+        prompt = input("
+Tarefa (ENTER vazio para sair): ").strip()
+
+        if not prompt:
+            break
+
+        agent(prompt)

@@ -1,21 +1,43 @@
-"""Verifica manualmente a conexão com o Ollama local (não é um teste automatizado)."""
+"""Verifica a conexao com o Ollama local e se o modelo principal esta instalado (nao e um teste automatizado)."""
+
+import json
+import sys
+from pathlib import Path
 
 import ollama
 
+REGISTRY = Path(__file__).resolve().parent.parent / "models" / "registry.json"
 
-def main() -> None:
+
+def main() -> int:
+    model = "qwen3:8b"
+
+    try:
+        model = json.loads(REGISTRY.read_text(encoding="utf-8")).get("active_fast_model") or model
+    except Exception:
+        pass
+
+    try:
+        installed = [m.model for m in ollama.list().models]
+    except Exception:
+        print("NAO FOI POSSIVEL falar com o Ollama.")
+        print("Abra o programa Ollama (menu Iniciar) ou rode iniciar.bat, e tente de novo.")
+        return 1
+
+    if not any(name == model or name.startswith(model + ":") or model.startswith(name) for name in installed):
+        print(f"O Ollama esta funcionando, mas o modelo {model} nao foi baixado.")
+        print(f"Para baixar, abra o Prompt de Comando e rode:  ollama pull {model}")
+        return 1
+
     response = ollama.chat(
-        model="qwen3:8b",
-        messages=[
-            {
-                "role": "user",
-                "content": "Responda apenas: conexão local funcionando.",
-            }
-        ],
+        model=model,
+        messages=[{"role": "user", "content": "Responda apenas: conexao local funcionando."}],
     )
 
-    print(response.message.content)
+    print(f"Modelo {model} respondeu:", response.message.content)
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
