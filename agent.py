@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from core.paths import PROJECT_ROOT, PROJECT_SPEC_PATH, TASKS_DIR
 from core.prompts import list_prompts, load_prompt
+from core.tasks import TASK_MARKER, build_task_prompt, find_task_number, list_tasks
 import ollama
 
 from core.context.manager import ContextManager
@@ -635,7 +636,7 @@ def agent(prompt: str):
     # DECOMPOSIÇÃO DE TAREFA DE DESENVOLVIMENTO
     # =========================================================
 
-    is_dev_task = any(
+    is_dev_task = not prompt.lstrip().startswith(TASK_MARKER) and any(
         kw in prompt.lower()
         for kw in ["continue", "desenvolvimento", "specs/projeto.md", "projeto.md", "checklist"]
     )
@@ -1333,6 +1334,18 @@ def resolve_prompt(text: str) -> str | None:
 
     text = text.strip()
 
+    number = find_task_number(text)
+
+    if number is not None:
+        ok, content = build_task_prompt(number, text)
+
+        if not ok:
+            print(content)
+            return None
+
+        print(f"Carregando a tarefa {number:02d} (e o progresso salvo, se houver).")
+        return content
+
     if not text.startswith("@"):
         return text
 
@@ -1350,6 +1363,11 @@ if __name__ == "__main__":
 
     if saved:
         print(f"Prompts salvos: {saved}")
+
+    numbered = ", ".join(f"{n}" for n, _ in list_tasks())
+
+    if numbered:
+        print(f"Tarefas numeradas: {numbered}  (ex.: dê continuidade à tarefa 2)")
 
     while True:
         typed = input("\nTarefa (ENTER vazio para sair): ")

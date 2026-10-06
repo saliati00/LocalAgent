@@ -2,7 +2,15 @@ import ast
 import os
 from pathlib import Path
 
-from core.paths import PROJECT_ROOT, PROMPTS_DIR, SKILLS_DIR, SKILLS_PENDING_DIR, TMP_ROOT, WORKSPACE_DIR
+from core.paths import (
+    PROJECT_ROOT,
+    PROMPTS_DIR,
+    SKILLS_DIR,
+    SKILLS_PENDING_DIR,
+    TAREFAS_DIR,
+    TMP_ROOT,
+    WORKSPACE_DIR,
+)
 
 
 WORKSPACE = WORKSPACE_DIR.resolve()
@@ -29,6 +37,16 @@ PROTECTED_PATHS = [
     SKILLS_PENDING_DIR.resolve(),
     # Prompts salvos são instruções do usuário; o agente não os edita.
     PROMPTS_DIR.resolve(),
+    # Tarefas numeradas e seus testes de aceite são definidos pelo usuário.
+    TAREFAS_DIR.resolve(),
+    # Scripts que o USUÁRIO executa (promoção de Skills, instalação) e dependências.
+    (PROJECT_ROOT / "scripts" / "promote_skill.py").resolve(),
+    (PROJECT_ROOT / "scripts" / "setup_windows.ps1").resolve(),
+    (PROJECT_ROOT / "instalar.bat").resolve(),
+    (PROJECT_ROOT / "iniciar.bat").resolve(),
+    (PROJECT_ROOT / "verificar.bat").resolve(),
+    (PROJECT_ROOT / "requirements.txt").resolve(),
+    (PROJECT_ROOT / "requirements-dev.txt").resolve(),
 ]
 
 # Compatibilidade com código que ainda importa o nome antigo.
