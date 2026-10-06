@@ -1,48 +1,63 @@
+import os
 from pathlib import Path
 
 from core.paths import PROJECT_ROOT, TMP_ROOT, WORKSPACE_DIR
 
 
 WORKSPACE = WORKSPACE_DIR.resolve()
-PROTECTED_SUBDIRS = [
+
+# Nada aqui pode ser escrito pelas tools genéricas (write_file, replace_in_file,
+# download_file). O agente não pode alterar a própria especificação, o registro
+# de modelos, a memória, nem o código que aplica permissões e os testes que o validam.
+# Essas peças só mudam por caminhos próprios do Harness ou pelo usuário.
+PROTECTED_PATHS = [
     (PROJECT_ROOT / ".git").resolve(),
     (PROJECT_ROOT / ".venv").resolve(),
+    (PROJECT_ROOT / "specs" / "projeto.md").resolve(),
+    (PROJECT_ROOT / "models" / "registry.json").resolve(),
+    (PROJECT_ROOT / "memory" / "store.json").resolve(),
+    (PROJECT_ROOT / "core").resolve(),
+    (PROJECT_ROOT / "tests").resolve(),
+    (PROJECT_ROOT / "agent.py").resolve(),
+    (PROJECT_ROOT / "tools" / "terminal.py").resolve(),
+    (PROJECT_ROOT / "tools" / "filesystem.py").resolve(),
+    (PROJECT_ROOT / "tools" / "manager.py").resolve(),
+    (PROJECT_ROOT / "pytest.ini").resolve(),
 ]
+
+# Compatibilidade com código que ainda importa o nome antigo.
+PROTECTED_SUBDIRS = PROTECTED_PATHS
+
+
+def _is_within(target: Path, base: Path) -> bool:
+    """True se target é base ou está dentro dela (sem diferenciar maiúsculas no Windows)."""
+
+    target_key = Path(os.path.normcase(str(target)))
+    base_key = Path(os.path.normcase(str(base)))
+
+    try:
+        target_key.relative_to(base_key)
+        return True
+    except ValueError:
+        return False
 
 
 def is_path_writable(target: Path) -> tuple[bool, str]:
     """
     Verifica se um caminho está dentro dos diretórios autorizados para escrita:
-    - Raiz do projeto, exceto .git e .venv
+    - Raiz do projeto, exceto os caminhos protegidos (PROTECTED_PATHS)
     - diretório temporário do sistema
     """
     target = target.resolve()
 
-    for protected in PROTECTED_SUBDIRS:
-        try:
-            target.relative_to(protected)
+    for protected in PROTECTED_PATHS:
+        if _is_within(target, protected):
             return (
                 False,
-                f"Escrita proibida dentro de diretório protegido do sistema/ambiente: {protected.name}",
+                f"Escrita proibida em caminho protegido do Harness/ambiente: {protected.name}",
             )
-        except ValueError:
-            pass
 
-    in_project = False
-    try:
-        target.relative_to(PROJECT_ROOT)
-        in_project = True
-    except ValueError:
-        pass
-
-    in_tmp = False
-    try:
-        target.relative_to(TMP_ROOT)
-        in_tmp = True
-    except ValueError:
-        pass
-
-    if not (in_project or in_tmp):
+    if not (_is_within(target, PROJECT_ROOT) or _is_within(target, TMP_ROOT)):
         return (
             False,
             f"Escrita permitida somente dentro do projeto ({PROJECT_ROOT}) ou {TMP_ROOT}",
