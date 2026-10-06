@@ -19,6 +19,7 @@ class TaskState:
         self.last_failure_reason = None
         self.is_blocked = False
         self.block_reason = None
+        self.needs_human_reason = None
         self.is_escalated = False
         self.escalation_event = None
         self.smart_status = None
@@ -150,6 +151,28 @@ class TaskState:
             "reason": reason,
         })
 
+    def needs_human(
+        self,
+        reason: str,
+    ):
+        """
+        A tarefa não pode avançar sem uma ação do usuário (senha, decisão, aprovação).
+
+        Diferente de cancelled (o usuário recusou) e de failed (erro técnico).
+        """
+
+        self.status = "needs_human"
+        self.needs_human_reason = reason
+
+        self.current_step = "Aguardando ação do usuário"
+
+        self.next_action = None
+
+        self.steps.append({
+            "type": "needs_human",
+            "reason": reason,
+        })
+
     def cancel(
         self,
         reason: str,
@@ -271,6 +294,7 @@ class TaskState:
             "last_tool_success": self.last_tool_success,
             "last_failure_reason": self.last_failure_reason,
             "is_blocked": self.is_blocked,
+            "needs_human_reason": self.needs_human_reason,
             "is_escalated": self.is_escalated,
             "escalation_event": self.escalation_event,
             "smart_status": self.smart_status,

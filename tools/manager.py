@@ -6,6 +6,7 @@ from tools.filesystem import (
 )
 
 from tools.terminal import run_command
+from tools.environment import check_tools
 
 from tools.web import (
     web_search,
@@ -135,6 +136,7 @@ TOOLS = {
     "web_search": web_search,
     "fetch_url": fetch_url,
     "download_file": download_file,
+    "check_tools": check_tools,
     "update_spec_checklist": update_spec_checklist_tool,
     "get_project_status": get_project_status,
     "save_memory": save_memory,
@@ -190,6 +192,10 @@ ALLOWED_ARGUMENTS = {
     "download_file": {
         "url",
         "destination",
+    },
+
+    "check_tools": {
+        "names",
     },
 
     "update_spec_checklist": {
@@ -274,6 +280,10 @@ REQUIRED_ARGUMENTS = {
     "download_file": {
         "url",
         "destination",
+    },
+
+    "check_tools": {
+        "names",
     },
 
     "update_spec_checklist": {

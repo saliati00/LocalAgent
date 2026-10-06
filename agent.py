@@ -10,7 +10,10 @@ from core.harness.completion import (
     build_continuation_reason,
 )
 from core.context.metrics import describe_prompt_sections
+from core.harness.handover import build_handover_packet
 from core.harness.logger import log, new_run_id
+from core.harness.memo import ToolMemo
+from core.harness.repetition import RepeatedResponseDetector
 from core.harness.permissions import parse_command
 from core.harness.project_progress import (
     extract_project_progress,
@@ -38,6 +41,8 @@ client = ollama.Client(
 
 NUM_CTX = 8192
 MAX_ITERATIONS = 30
+MAX_ESCALATIONS = 3
+SMART_MAX_ITERATIONS = 8
 PROJECT_SPEC = str(PROJECT_SPEC_PATH)
 
 
@@ -215,6 +220,24 @@ TOOLS = [
                     }
                 },
                 "required": ["url", "destination"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_tools",
+            "description": "Verifica de uma só vez quais ferramentas/executáveis existem no PATH (somente leitura). Use no lugar de várias chamadas 'command -v' ou 'where'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Nomes dos executáveis (ex.: [\"git\", \"python\", \"cmake\"]). Máximo 30."
+                    }
+                },
+                "required": ["names"]
             }
         }
     },
@@ -681,6 +704,14 @@ REGRAS FUNDAMENTAIS DE EXECUÇÃO
     iteration = 0
     consecutive_tool_errors = 0
     stagnation_detector = StagnationDetector()
+    tool_memo = ToolMemo()
+    response_repeats = RepeatedResponseDetector()
+
+    fast_model = router.get_fast_model() or active_model
+    on_smart = active_model != fast_model
+    smart_iterations = 0
+    smart_progress = False
+    escalation_count = 0
 
     while True:
 
@@ -694,62 +725,141 @@ REGRAS FUNDAMENTAIS DE EXECUÇÃO
             print("\n[STOP] Limite máximo de iterações atingido.")
             break
 
-        # Verificação de escalada (erros técnicos ou estagnação de raciocínio)
-        is_stagnated, stag_reason, stag_event = stagnation_detector.check_escalation(
-            phase=state.current_phase,
-            task=effective_goal,
-            fast_model=active_model,
-            iteration=iteration,
-            last_action=state.last_tool or state.current_step,
-        )
+        # =====================================================
+        # ESCALADA FAST -> SMART E RETORNO SMART -> FAST
+        # =====================================================
 
-        escalate, esc_reason = router.should_escalate(
-            consecutive_errors=consecutive_tool_errors,
-            iteration=iteration,
-            tool_failures=state.failed_tools,
-            stagnation_cycles=stagnation_detector.stagnation_cycles,
-            max_stagnation_cycles=stagnation_detector.max_stagnation_cycles,
-            stagnation_reason=stag_reason,
-        )
-        if escalate:
-            log("ESCALATION_CHECK", esc_reason)
-            event = stag_event or stagnation_detector.create_escalation_event(
+        if on_smart:
+            smart_iterations += 1
+
+            if stagnation_detector.is_stagnated():
+                reason = (
+                    f"O modelo SMART '{active_model}' também não conseguiu progredir "
+                    f"({stagnation_detector.stagnation_cycles} ciclos sem progresso útil)."
+                )
+                state.needs_human(reason)
+                log("NEEDS_HUMAN", reason)
+                print(f"\n[NEEDS_HUMAN] {reason}")
+                break
+
+            if smart_progress or smart_iterations > SMART_MAX_ITERATIONS:
+                why = (
+                    "O SMART destravou a etapa; voltando ao modelo FAST."
+                    if smart_progress
+                    else f"O SMART usou {SMART_MAX_ITERATIONS} iterações sem destravar; voltando ao FAST."
+                )
+                packet = build_handover_packet(
+                    goal=effective_goal,
+                    from_model=active_model,
+                    to_model=fast_model,
+                    reason=why,
+                    messages=messages,
+                    actions_completed=state.actions_completed,
+                    phase=state.current_phase,
+                    next_action=state.next_action,
+                )
+                messages[:] = [messages[0], {"role": "user", "content": packet}]
+                log("DE_ESCALATE", why)
+                active_model = fast_model
+                on_smart = False
+                smart_progress = False
+                smart_iterations = 0
+                consecutive_tool_errors = 0
+                stagnation_detector.reset()
+                response_repeats.reset()
+                state.status = "running"
+
+        if not on_smart:
+            # Verificação de escalada (erros técnicos ou estagnação de raciocínio)
+            is_stagnated, stag_reason, stag_event = stagnation_detector.check_escalation(
                 phase=state.current_phase,
                 task=effective_goal,
                 fast_model=active_model,
                 iteration=iteration,
-                last_action=state.last_tool or state.current_step or "Nenhuma ação recente",
-                reason=esc_reason,
+                last_action=state.last_tool or state.current_step,
             )
-            state.escalate_to_smart(event, reason=esc_reason)
-            log("ESCALATE_TO_SMART", json.dumps(state.escalation_event, ensure_ascii=False))
-            print(f"\n[ESCALATE_TO_SMART] {esc_reason}")
 
-            # Verificação determinística da disponibilidade do SMART
-            is_available, smart_reason, smart_diag = router.check_smart_availability()
-            smart_diag.update({
-                "fast_model": active_model,
-                "escalation_reason": esc_reason,
-                "phase": state.current_phase,
-                "task": effective_goal,
-            })
+            escalate, esc_reason = router.should_escalate(
+                consecutive_errors=consecutive_tool_errors,
+                iteration=iteration,
+                tool_failures=state.failed_tools,
+                stagnation_cycles=stagnation_detector.stagnation_cycles,
+                max_stagnation_cycles=stagnation_detector.max_stagnation_cycles,
+                stagnation_reason=stag_reason,
+            )
 
-            if is_available:
-                smart_model = router.get_smart_model()
-                state.resolve_escalation_smart_available(smart_diag, reason=smart_reason)
-                log("SMART_AVAILABLE", json.dumps(smart_diag, ensure_ascii=False))
-                print(f"\n[SMART_AVAILABLE] {smart_reason}")
-                # Prepara entrega da tarefa ao SMART
-                active_model = smart_model
-                log("ESCALATED", f"Tarefa preparada para entrega ao modelo especialista SMART: {active_model}")
-            else:
-                state.resolve_escalation_smart_unavailable(smart_diag, reason=smart_reason)
-                log("SMART_UNAVAILABLE", json.dumps(smart_diag, ensure_ascii=False))
-                print(f"\n[SMART_UNAVAILABLE] {smart_reason}")
-                print("\n[PROXIMA_CAPACIDADE] Selecionar/preparar modelo SMART (Model Scout).")
-                log("STOP", f"Escalonamento para SMART: SMART indisponível ({smart_reason}). Próxima capacidade: selecionar/preparar SMART.")
-                print(f"\n[STOP] Escalonamento para SMART: SMART indisponível. Próxima capacidade necessária: selecionar/preparar SMART.")
-                break
+            if escalate:
+                log("ESCALATION_CHECK", esc_reason)
+                event = stag_event or stagnation_detector.create_escalation_event(
+                    phase=state.current_phase,
+                    task=effective_goal,
+                    fast_model=active_model,
+                    iteration=iteration,
+                    last_action=state.last_tool or state.current_step or "Nenhuma ação recente",
+                    reason=esc_reason,
+                )
+                state.escalate_to_smart(event, reason=esc_reason)
+                log("ESCALATE_TO_SMART", json.dumps(state.escalation_event, ensure_ascii=False))
+                print(f"\n[ESCALATE_TO_SMART] {esc_reason}")
+
+                # Verificação determinística da disponibilidade do SMART
+                is_available, smart_reason, smart_diag = router.check_smart_availability()
+                smart_diag.update({
+                    "fast_model": active_model,
+                    "escalation_reason": esc_reason,
+                    "phase": state.current_phase,
+                    "task": effective_goal,
+                })
+
+                if is_available:
+                    escalation_count += 1
+
+                    if escalation_count > MAX_ESCALATIONS:
+                        reason = (
+                            f"A tarefa já foi escalada {MAX_ESCALATIONS} vezes sem destravar. "
+                            "É preciso uma decisão ou ação do usuário."
+                        )
+                        state.needs_human(reason)
+                        log("NEEDS_HUMAN", reason)
+                        print(f"\n[NEEDS_HUMAN] {reason}")
+                        break
+
+                    smart_model = router.get_smart_model()
+                    state.resolve_escalation_smart_available(smart_diag, reason=smart_reason)
+                    log("SMART_AVAILABLE", json.dumps(smart_diag, ensure_ascii=False))
+                    print(f"\n[SMART_AVAILABLE] {smart_reason}")
+
+                    # O SMART recebe um resumo curto, não o histórico (e os loops) do FAST.
+                    packet = build_handover_packet(
+                        goal=effective_goal,
+                        from_model=active_model,
+                        to_model=smart_model,
+                        reason=esc_reason,
+                        messages=messages,
+                        actions_completed=state.actions_completed,
+                        phase=state.current_phase,
+                        next_action=state.next_action,
+                    )
+                    messages[:] = [messages[0], {"role": "user", "content": packet}]
+
+                    fast_model = active_model
+                    active_model = smart_model
+                    on_smart = True
+                    smart_progress = False
+                    smart_iterations = 0
+                    consecutive_tool_errors = 0
+                    stagnation_detector.reset()
+                    response_repeats.reset()
+                    state.status = "running"
+                    log("ESCALATED", f"Tarefa entregue ao modelo especialista SMART: {active_model}")
+                else:
+                    state.resolve_escalation_smart_unavailable(smart_diag, reason=smart_reason)
+                    log("SMART_UNAVAILABLE", json.dumps(smart_diag, ensure_ascii=False))
+                    print(f"\n[SMART_UNAVAILABLE] {smart_reason}")
+                    print("\n[PROXIMA_CAPACIDADE] Selecionar/preparar modelo SMART (Model Scout).")
+                    log("STOP", f"Escalonamento para SMART: SMART indisponível ({smart_reason}). Próxima capacidade: selecionar/preparar SMART.")
+                    print(f"\n[STOP] Escalonamento para SMART: SMART indisponível. Próxima capacidade necessária: selecionar/preparar SMART.")
+                    break
 
         log("MODEL", active_model)
 
@@ -821,7 +931,13 @@ REGRAS FUNDAMENTAIS DE EXECUÇÃO
                         result = constraint_error
                         log("CONSTRAINT", result["error"])
                     else:
-                        result = execute_tool(name, arguments)
+                        result = tool_memo.lookup(name, arguments)
+
+                        if result is not None:
+                            log("TOOL_CACHE_HIT", name)
+                        else:
+                            result = execute_tool(name, arguments)
+                            tool_memo.record(name, arguments, result)
 
                 state.finish_tool(name, result)
 
@@ -837,6 +953,8 @@ REGRAS FUNDAMENTAIS DE EXECUÇÃO
                     current_state=state_snapshot,
                 )
                 if is_prog:
+                    if on_smart:
+                        smart_progress = True
                     log("PROGRESS_DETECTED", f"Progresso útil detectado na ferramenta: {name}")
                 elif result.get("success"):
                     log("STAGNATION_CYCLE", f"Ação sem progresso útil: {name} (ciclos={stagnation_detector.stagnation_cycles})")
@@ -946,6 +1064,16 @@ REGRAS FUNDAMENTAIS DE EXECUÇÃO
 
         print("\n[AGENT]")
         print(content)
+
+        if response_repeats.check(content):
+            reason = (
+                "O modelo está repetindo a mesma resposta sem avançar; "
+                "a tarefa provavelmente depende de uma ação sua (senha, decisão ou aprovação)."
+            )
+            state.needs_human(reason)
+            log("NEEDS_HUMAN", reason)
+            print(f"\n[NEEDS_HUMAN] {reason}")
+            break
 
         # Avaliação de conclusão rigorosa controlada pelo Harness
         if state.last_tool_success is False:
