@@ -154,7 +154,7 @@ Hardware inicial:
 
 * CPU: Ryzen 5 5600G
 * GPU: NVIDIA RTX 3070 8 GB
-* Sistema: Fedora KDE
+* Sistema: Windows 10/11 (migrado de Fedora KDE)
 * RAM: utilizar toda a RAM disponível para permitir CPU offload quando necessário.
 
 O projeto deve considerar que:
@@ -1409,7 +1409,7 @@ O Harness deve continuar funcionando.
 
 Configuração atualmente conhecida:
 
-* SO: Fedora 44 KDE
+* SO: Windows 10/11 (anteriormente Fedora 44 KDE; o ambiente foi mapeado no Fedora e deve ser reverificado no Windows)
 * CPU: Ryzen 5 5600G
 * GPU: NVIDIA RTX 3070 8 GB
 * Backend: Ollama 0.35.1
@@ -1499,7 +1499,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-68 testes aprovados
+196 testes aprovados (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1544,13 +1544,29 @@ A partir desse teste, os próximos componentes devem ser determinados pela pergu
 
 Essa resposta deve orientar a próxima etapa de desenvolvimento.
 
-A arquitetura anteriormente definida como FAST 8B + SMART 14B deve ser
-migrada para FAST + SMART.
+## Decisão registrada: FAST + SMART (sem tamanho fixo)
 
-O tamanho do modelo não define o papel SMART.
-14B deve ser apenas uma característica de um candidato, não um requisito.
+A arquitetura anteriormente definida como FAST 8B + SMART 14B foi migrada para
+FAST + SMART. O tamanho do modelo não define o papel SMART: 14B é apenas uma
+característica de um candidato, não um requisito. Nenhum modelo é baixado sem
+confirmação explícita do usuário.
 
-Antes de continuar o desenvolvimento, atualize a especificação do projeto
-para refletir essa decisão e ajuste os arquivos necessários.
-Não baixe nenhum modelo.
-Depois rode os testes.
+---
+
+# 38. MIGRAÇÃO PARA WINDOWS
+
+O projeto foi portado de Fedora/Linux para Windows.
+
+* Caminhos centralizados em `core/paths.py` (nada de caminhos fixos como `/home/...`).
+* `run_command` continua com `shell=False`; usa `.venv\Scripts`, `os.pathsep` e resolve executáveis via PATH/PATHEXT.
+* Comandos internos do `cmd` (`dir`, `type`, `del`...) não são executáveis; leitura e listagem de arquivos usam `read_file` e `list_directory`.
+* PowerShell: somente cmdlets de leitura passam sem confirmação; o resto pede confirmação.
+* `winget`, `choco` e `scoop` contam como instalação (`allow_install`); `reg`, `sc`, `icacls`, `takeown`, `netsh`, `schtasks`, `setx` contam como alteração de sistema (`allow_system_changes`); `del`, `rd`, `Remove-Item` contam como destrutivos (`allow_destructive`).
+* Skill `windows` adicionada; a Skill `linux` permanece como referência.
+
+Hardening associado (ver `specs/auditoria_arquitetural.md`):
+
+* Tools genéricas não escrevem em `specs/projeto.md`, `models/registry.json`, `memory/store.json`, `core/`, `tests/`, `agent.py`, `pytest.ini` nem nas tools de terminal/filesystem/manager.
+* O schema de tools exposto ao modelo é validado contra o dispatch por teste de contrato.
+* `find` só é seguro sem `-delete`/`-exec`; `pytest` só é seguro para `tests/` e sem plugins/configuração externa.
+* Restrições de tarefa (`allow_install`, `allow_system_changes`, `allow_destructive`) passam a valer de fato no fluxo do agente.
