@@ -22,3 +22,6 @@ TMP_ROOT = Path(tempfile.gettempdir()).resolve()
 
 VENV_DIR = PROJECT_ROOT / ".venv"
 VENV_BIN_DIR = VENV_DIR / ("Scripts" if os.name == "nt" else "bin")
+
+LOGS_DIR = PROJECT_ROOT / "logs"
+SKILLS_PENDING_DIR = PROJECT_ROOT / "skills_pending"

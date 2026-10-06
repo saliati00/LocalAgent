@@ -9,7 +9,8 @@ from core.harness.completion import (
     check_completion,
     build_continuation_reason,
 )
-from core.harness.logger import log
+from core.context.metrics import describe_prompt_sections
+from core.harness.logger import log, new_run_id
 from core.harness.permissions import parse_command
 from core.harness.project_progress import (
     extract_project_progress,
@@ -464,6 +465,9 @@ def agent(prompt: str):
     # RESTRIÇÕES DA TAREFA
     # =========================================================
 
+    run_id = new_run_id()
+    log("RUN_START", f"run_id={run_id}")
+
     constraints = TaskConstraints.from_task(prompt)
 
     log("CONSTRAINTS", str(constraints.summary()))
@@ -643,6 +647,21 @@ REGRAS FUNDAMENTAIS DE EXECUÇÃO
 
 9. FOCO NA CONCLUSÃO: Quando a etapa atual estiver concluída e validada, apresente um resumo objetivo dos resultados e aponte a próxima ação pendente.
 """
+
+    log(
+        "PROMPT_SIZES",
+        describe_prompt_sections(
+            {
+                "constraints": constraints_context,
+                "project_summary": project_summary,
+                "memory": memory_context,
+                "skills": skill_context,
+                "system_total": system_instructions,
+                "user_prompt": user_prompt_text,
+            },
+            context_window=NUM_CTX,
+        ),
+    )
 
     messages = [
         {

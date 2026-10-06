@@ -1,9 +1,27 @@
+import uuid
 from datetime import datetime
-from pathlib import Path
+
+from core.paths import LOGS_DIR
 
 
-LOG_DIR = Path.home() / "local-agent" / "logs"
+LOG_DIR = LOGS_DIR
 LOG_FILE = LOG_DIR / "agent.log"
+
+_run_id = "-"
+
+
+def new_run_id() -> str:
+    """Inicia um novo run e devolve seu id (8 caracteres)."""
+
+    global _run_id
+
+    _run_id = uuid.uuid4().hex[:8]
+
+    return _run_id
+
+
+def get_run_id() -> str:
+    return _run_id
 
 
 def log(event: str, details: str = ""):
@@ -11,7 +29,7 @@ def log(event: str, details: str = ""):
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    line = f"[{timestamp}] {event}"
+    line = f"[{timestamp}] [{_run_id}] {event}"
 
     if details:
         line += f" | {details}"
