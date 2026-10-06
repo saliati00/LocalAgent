@@ -1157,6 +1157,9 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [x] Tarefas numeradas retomáveis, com roteiro, progresso salvo e teste de aceite (pronto quando: pytest tests/test_numbered_tasks.py passa)
 * [x] Saída de console segura no Windows, sem erro de codificação (pronto quando: pytest tests/test_console_encoding.py passa)
 * [x] Prompt compacto: tarefa numerada abaixo de 60% da janela e aviso PROMPT_TOO_BIG (pronto quando: PROMPT_SIZES de uma tarefa numerada mostra menos de 0,6 de NUM_CTX)
+* [x] Tools por perfil: grupo base de 8 tools e grupos extras sob demanda (pronto quando: pytest tests/test_tool_profiles.py passa)
+* [x] Busca no código com a tool search_files (pronto quando: pytest tests/test_search_files.py passa)
+* [x] Backup automático antes de sobrescrever arquivos e script de restauração (pronto quando: pytest tests/test_backups.py passa)
 * [ ] Criar o conjunto de avaliação com 10 a 20 tarefas reais e critério de aceite executável (tarefas 02 e 03 em tarefas/; pronto quando: pytest -m aceite tests/test_aceite_tarefa02.py tests/test_aceite_tarefa03.py passa e o runner imprime a taxa de sucesso)
 * [ ] [humano] Medir no PC alvo o consumo real do prompt e mantê-lo abaixo de 60% da janela (pronto quando: PROMPT_SIZES de 10 tarefas reais mostram est_tokens total menor que 0,6 de NUM_CTX)
 * [ ] [humano] Comparar FAST sozinho, FAST com think, SMART sozinho e cascata com o conjunto de avaliação (pronto quando: a tabela de resultados está registrada em specs/avaliacoes.md)
@@ -1528,7 +1531,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-331 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+371 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1729,7 +1732,7 @@ Hipóteses a medir:
 
 * Issue do Ollama #14601 (mar/2026): com `qwen3:8b` e o parâmetro `tools`, tool calls anteriores do assistente somem do histórico, o que explicaria loops de repetição. Registrar a versão do Ollama no PC alvo.
 * `OLLAMA_FLASH_ATTENTION=1` com `OLLAMA_KV_CACHE_TYPE=q8_0` para subir o contexto para 12 a 16k; efeito na precisão de tool calling não medido.
-* Expor de 5 a 8 tools por turno (hoje o FAST vê ~20, ~2,9 mil tokens).
+* Expor de 5 a 8 tools por turno: implementado (capítulo 47); falta medir se o roteamento por palavras erra em tarefas reais.
 * Formato de edição `whole` para arquivos pequenos (um relato mostrou 0 para 100 de acerto ao trocar de `diff`).
 * Escrita compacta de prompts, schemas e Skills (menos tokens por instrução) como alternativa a cortar conteúdo.
 
@@ -1741,7 +1744,7 @@ Já implementado a partir desta pesquisa:
 * Validação de sintaxe Python em `write_file` e `replace_in_file`: a escrita inválida é recusada e o arquivo não muda.
 * Validador de Skills recusa Unicode invisível, trechos base64 e URLs em rascunhos.
 
-Ainda não implementado: reduzir tools por turno, substituir o juiz de conclusão, conjunto de avaliação, escrita compacta de prompts.
+Ainda não implementado: substituir o juiz de conclusão, conjunto de avaliação, escrita compacta de prompts (inglês/telegráfico) e a comparação com harnesses prontos (Aider) na avaliação.
 
 
 ---
@@ -1752,6 +1755,29 @@ Achados de uma simulação de clone limpo (06/10/2026), já corrigidos:
 
 * **Tarefas numeradas:** `tarefas/tarefa-NN-*.md` define objetivo, passos, o que pode mexer, "pronto quando" e onde salvar o progresso. O usuário diz "dê continuidade à tarefa 2" (ou `@tarefa2`); o Harness carrega o roteiro, o pedido e o progresso salvo em `workspace/tarefa-NN/progresso.md`. A pasta `tarefas/` e os testes de aceite são protegidos: só o usuário os altera. Os testes de aceite usam o marcador `aceite` (fora da suíte normal; rodar com `pytest -m aceite <arquivo>`), e quem decide se a tarefa terminou é o teste, não o modelo. Uma tarefa numerada não aciona o fluxo de desenvolvimento do checklist.
 * **Console do Windows:** um `print` com "→", "✓" ou emoji derrubava o agente em console cp1252/cp850 (inclusive a tela de confirmação). Corrigido com `core/console.py` (`safe_print`, `ensure_utf8_console`) e `chcp 65001` + `PYTHONUTF8=1` nos `.bat`.
-* **Prompt fixo acima da janela:** uma tarefa numerada estimava 8363 tokens para 8192 (102%) antes de qualquer conversa. Medidas: system prompt compacto para tarefas numeradas (resumo do checklist fora e Skills só como índice), memória persistente limitada a 1500 caracteres (entradas mais recentes primeiro), orçamento de Skills de 3500 caracteres, descrições do schema de tools abreviadas, regras mais curtas. Resultado estimado: tarefa numerada 53%, tarefa simples ~60% e desenvolvimento ~70% da janela (estimativa de 3 caracteres por token; confirmar com `PROMPT_SIZES`). O Harness registra `PROMPT_TOO_BIG` quando o prompt fixo passa de 70%.
+* **Prompt fixo acima da janela:** uma tarefa numerada estimava 8363 tokens para 8192 (102%) antes de qualquer conversa. Medidas: system prompt compacto para tarefas numeradas (resumo do checklist fora e Skills só como índice), memória persistente limitada a 1500 caracteres (entradas mais recentes primeiro), orçamento de Skills de 3500 caracteres, descrições do schema de tools abreviadas, regras mais curtas. Resultado estimado na época: tarefa numerada 53%, tarefa simples ~60% e desenvolvimento ~70% da janela (superado pelo capítulo 47: 30%, 28% e 65%) (estimativa de 3 caracteres por token; confirmar com `PROMPT_SIZES`). O Harness registra `PROMPT_TOO_BIG` quando o prompt fixo passa de 70%.
 * **Proteções adicionais:** os scripts que o usuário executa (`scripts/promote_skill.py`, instalador e `.bat`) e os `requirements*.txt` ficaram fora do alcance das tools do agente.
 * **Resumo de logs:** `scripts/summarize_logs.py` consolida `PROMPT_SIZES`, tokens, avisos de contexto, escaladas e `needs_human`.
+
+
+---
+
+# 47. HARNESS ENXUTO: TOOLS POR PERFIL, BUSCA E BACKUP
+
+Pesquisa de 06/10/2026 sobre harnesses usados com modelos locais: nenhum harness popular cabe de forma confortável em 8k de contexto. OpenCode usa ~7,5 mil tokens só no primeiro turno (um blog, versão 1.18), OpenHands pede 22k ou mais e Goose pede 8k a 32k. A Cline criou um prompt compacto e mesmo assim relatos da AMD dizem que modelos abaixo de ~30B falham com ela. A recomendação da comunidade para contexto curto é o estilo minimalista (poucas tools, prompt abaixo de ~1k tokens), que é o que este harness segue. Decisão: **manter o harness próprio, enxuto, e roubar ideias** do Aider, mini-SWE-agent e pi, sem adotá-los. (Parte das fontes não foi aberta pessoalmente; ver capítulo 45.)
+
+Implementado:
+
+* **Tools por perfil.** O schema de tools entra em toda chamada e era o maior bloco fixo do prompt. Agora o modelo vê só o grupo `base` (8 tools: `list_directory`, `read_file`, `write_file`, `replace_in_file`, `run_command`, `search_files`, `check_tools`, `load_skill`). Os demais grupos aparecem conforme a tarefa:
+  * `web` (`web_search`, `fetch_url`, `download_file`): pedido com pesquisa, internet, URL, download, GitHub...
+  * `memory` (`save_memory`, `get_memory`): pedido que fala de memória; sempre no fluxo de desenvolvimento.
+  * `project` (`update_spec_checklist`, `get_project_status`): fluxo de desenvolvimento ou pedido que cita checklist/pendência.
+  * `models` (registry, candidato, adoção do SMART): pedido ou fase que trata de modelos.
+  * `skills_authoring` (`propose_skill`): somente o SMART.
+  O system prompt lista pelo nome as tools que estão fora do schema. Se o modelo chamar uma delas, o Harness ativa o grupo (log `TOOL_GROUP_ENABLED`) e ela passa a aparecer no schema. A ordem dos grupos é fixa para ajudar o cache de prefixo. O dispatch continua completo: perfis controlam só o que gasta contexto, não permissões.
+* **`search_files`** (somente leitura): procura texto nas linhas dos arquivos do projeto (sem diferenciar maiúsculas), com filtro de nome (`glob`) e pasta (`path`); sem texto, lista arquivos por nome. Restrita ao projeto, ignora `.git`, `.venv`, `__pycache__`, logs, backups e arquivos binários ou grandes, e devolve no máximo 30 resultados curtos (limite 50), com aviso quando há mais.
+* **Backup automático.** Antes de `write_file` ou `replace_in_file` sobrescrever um arquivo existente, o Harness guarda a versão anterior em `backups/<data-hora>/<caminho>` (arquivos até 2 MB; mantém as 300 pastas mais recentes). O agente não tem tool para restaurar e não escreve em `backups/`. Quem desfaz é o usuário: `python scripts/restaurar.py list` e `python scripts/restaurar.py restore "<id>"` (restaurar também guarda a versão atual).
+* **Prompt compacto** também para tarefas simples: o resumo do checklist e as regras longas só entram no fluxo de desenvolvimento.
+* **Resultado medido (estimativa de 3 caracteres por token):** schema do grupo base ~885 tokens (antes ~2,9 mil com todas as tools). Prompt fixo estimado: tarefa numerada ~30% da janela de 8192, tarefa simples ~28% e desenvolvimento ~65%.
+
+Pendências deste capítulo: medir em tarefas reais se o roteamento por palavras-chave erra (uma tool escondida chamada sem argumentos gera uma falha antes de o grupo ser ativado); formato de edição `whole` para arquivos pequenos; comparar com o Aider na avaliação da FASE 11.

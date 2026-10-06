@@ -24,6 +24,9 @@ Rode o teste de aceite dela (coluna da direita) no Prompt de Comando, dentro da 
 
 Se passar, a tarefa está concluída de verdade. Quem decide isso é o teste, não o que o modelo diz.
 
+## Ferramentas que o agente usa nas tarefas
+Por padrão ele recebe poucas ferramentas (ler, escrever, editar, rodar comando, buscar no projeto, verificar ferramentas). As demais (web, memória, checklist, modelos) aparecem sozinhas quando a tarefa precisa. Isso poupa o contexto do modelo.
+
 ## Regras
 - O agente não consegue alterar esta pasta nem os testes (são protegidos). Só você.
 - Ele pode escrever em `workspace/` e, nas tarefas 02 e 03, em `scripts/eval/`.

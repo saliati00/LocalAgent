@@ -1,5 +1,6 @@
 import datetime
 import json
+import re
 from pathlib import Path
 from core.paths import PROJECT_ROOT, PROJECT_SPEC_PATH, TASKS_DIR
 from core.prompts import list_prompts, load_prompt
@@ -248,6 +249,34 @@ TOOLS = [
                     }
                 },
                 "required": ["url", "destination"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_files",
+            "description": "Procura um texto nas linhas dos arquivos do projeto, ou lista arquivos pelo nome (sem pattern). Resultados curtos.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pattern": {
+                        "type": "string",
+                        "description": "Texto a procurar (ignora maiúsculas). Vazio = só lista os arquivos que casam com glob."
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Pasta dentro do projeto (padrão: raiz)."
+                    },
+                    "glob": {
+                        "type": "string",
+                        "description": "Filtro de nome de arquivo, ex.: *.py (padrão: todos)."
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Máximo de resultados (padrão 30, limite 50)."
+                    }
+                }
             }
         }
     },
@@ -605,19 +634,89 @@ def compact_tools(tools: list) -> list:
     return compacted
 
 
-def visible_tools(on_smart: bool) -> list:
+# Perfis de tools: o schema entra em toda chamada e é o maior bloco fixo do prompt,
+# então o modelo vê só o grupo "base" e os demais conforme a tarefa (ou ao chamá-los).
+TOOL_GROUPS = {
+    "base": [
+        "list_directory",
+        "read_file",
+        "write_file",
+        "replace_in_file",
+        "run_command",
+        "search_files",
+        "check_tools",
+        "load_skill",
+    ],
+    "web": ["web_search", "fetch_url", "download_file"],
+    "memory": ["save_memory", "get_memory"],
+    "project": ["update_spec_checklist", "get_project_status"],
+    "models": [
+        "get_model_registry",
+        "register_model_candidate",
+        "set_smart_candidate_for_benchmark",
+        "set_active_smart_model",
+    ],
+    "skills_authoring": ["propose_skill"],
+}
+
+GROUP_ORDER = list(TOOL_GROUPS)
+
+TOOL_TO_GROUP = {name: group for group, names in TOOL_GROUPS.items() for name in names}
+
+GROUP_KEYWORDS = {
+    "web": r"\b(pesquis\w*|internet|web|url|https?|download|baix\w*|github|release|documenta\w*|site)\b",
+    "memory": r"\b(mem[óo]ria|lembr\w*|memoriz\w*)\b",
+    "models": r"\b(registry|smart|candidato|benchmark|quantiz\w*)\b",
+    "project": r"\b(checklist|projeto\.md|pend[êe]ncia)\b",
+}
+
+
+def select_tool_groups(prompt: str, is_dev_task: bool = False, phase_text: str = "") -> set:
     """
-    Schema de tools enviado ao modelo. O schema entra em toda chamada e consome
-    contexto; propose_skill só é útil (e permitida) para o SMART, então o FAST
-    não a recebe.
+    Grupos de tools que devem aparecer no schema desta tarefa.
+
+    Sempre "base". Os outros entram por palavras do pedido, no fluxo de desenvolvimento
+    (project e memory; models quando a fase trata de modelos) ou quando o modelo chama
+    uma tool de um grupo que ainda não estava visível.
+    """
+
+    groups = {"base"}
+    text = (prompt or "").lower()
+
+    for group, pattern in GROUP_KEYWORDS.items():
+        if re.search(pattern, text):
+            groups.add(group)
+
+    if is_dev_task:
+        groups.update({"project", "memory"})
+
+        if re.search(GROUP_KEYWORDS["models"], (phase_text or "").lower()):
+            groups.add("models")
+
+    return groups
+
+
+def visible_tools(on_smart: bool, groups=None) -> list:
+    """
+    Schema de tools enviado ao modelo, na ordem fixa dos grupos (ordem estável ajuda o
+    cache de prefixo). `groups=None` devolve todos. propose_skill só aparece para o SMART.
     """
 
     tools = COMPACT_TOOLS if COMPACT_TOOL_SCHEMA else TOOLS
+    by_name = {t["function"]["name"]: t for t in tools}
 
-    if on_smart or not ONLY_SMART_CAN_PROPOSE_SKILLS:
-        return tools
+    selected = []
 
-    return [t for t in tools if t["function"]["name"] != "propose_skill"]
+    for group in GROUP_ORDER:
+        if group == "skills_authoring":
+            if ONLY_SMART_CAN_PROPOSE_SKILLS and not on_smart:
+                continue
+        elif groups is not None and group not in groups:
+            continue
+
+        selected.extend(by_name[name] for name in TOOL_GROUPS[group])
+
+    return selected
 
 
 COMPACT_TOOLS = compact_tools(TOOLS)
@@ -741,13 +840,33 @@ Instruções para cumprir esta etapa:
 
     is_numbered_task = prompt.lstrip().startswith(TASK_MARKER)
 
+    enabled_groups = select_tool_groups(
+        prompt,
+        is_dev_task=is_dev_task,
+        phase_text=f"{state.current_phase or ''} {state.next_action or ''}",
+    )
+    extra_tools = [
+        name
+        for group in GROUP_ORDER
+        if group not in enabled_groups and group != "skills_authoring"
+        for name in TOOL_GROUPS[group]
+    ]
+    extra_tools_note = (
+        "Outras ferramentas (chame pelo nome quando precisar): " + ", ".join(extra_tools) + "."
+        if extra_tools
+        else ""
+    )
+
     memory_store = MemoryStore()
     memory_context = memory_store.format_context(max_chars=MEMORY_PROMPT_MAX_CHARS)
 
     project_summary = format_project_summary(progress)
 
-    if is_numbered_task:
-        # A tarefa numerada já traz os passos; o resumo do checklist só gasta contexto.
+    # Só o desenvolvimento do checklist precisa do resumo do projeto e das regras longas;
+    # tarefas numeradas e tarefas simples usam o prompt compacto.
+    use_compact_prompt = is_numbered_task or not is_dev_task
+
+    if use_compact_prompt:
         project_summary = ""
         project_context = memory_context
     else:
@@ -815,23 +934,25 @@ Orientações:
     # MENSAGENS INICIAIS
     # =========================================================
 
-    if is_numbered_task:
+    if use_compact_prompt:
         system_instructions = f"""
 Você é o agente local do projeto {PROJECT_ROOT}. Use as ferramentas para agir; não apenas planeje.
 
 {constraints_context}
+{extra_tools_note}
 
 {project_context}
 
 {skill_context}
 
-REGRAS: 1) Siga a tarefa passo a passo. 2) Não repita consultas nem comandos iguais. 3) Se algo falhar 2 vezes, pare e explique o que o usuário deve fazer. 4) Respeite o Permission Manager. 5) Ao terminar, resuma em até 3 linhas.
+REGRAS: 1) Faça o que foi pedido, passo a passo. 2) Não repita consultas nem comandos iguais. 3) Se algo falhar 2 vezes, pare e explique o que o usuário deve fazer. 4) Respeite o Permission Manager. 5) Ao terminar, resuma em até 3 linhas.
 """
     else:
         system_instructions = f"""
 Você é o agente local autônomo do projeto {PROJECT_ROOT}. Use as ferramentas para ler, editar, pesquisar, executar comandos e atualizar a especificação.
 
 {constraints_context}
+{extra_tools_note}
 
 {project_context}
 
@@ -865,7 +986,7 @@ REGRAS:
             {
                 "system_instructions": system_instructions,
                 "user_prompt": user_prompt_text,
-                "tools_schema": json.dumps(visible_tools(False), ensure_ascii=False),
+                "tools_schema": json.dumps(visible_tools(False, enabled_groups), ensure_ascii=False),
                 "detail:constraints": constraints_context,
                 "detail:project_summary": project_summary,
                 "detail:memory": memory_context,
@@ -879,7 +1000,7 @@ REGRAS:
     fixed_tokens = (
         estimate_tokens(system_instructions)
         + estimate_tokens(user_prompt_text)
-        + estimate_tokens(json.dumps(visible_tools(False), ensure_ascii=False))
+        + estimate_tokens(json.dumps(visible_tools(False, enabled_groups), ensure_ascii=False))
     )
 
     if fixed_tokens > NUM_CTX * PROMPT_BUDGET_WARN_RATIO:
@@ -1062,7 +1183,7 @@ REGRAS:
             response = client.chat(
                 model=active_model,
                 messages=prepared_messages,
-                tools=visible_tools(on_smart),
+                tools=visible_tools(on_smart, enabled_groups),
                 think=False,
                 options={"num_ctx": NUM_CTX},
             )
@@ -1113,6 +1234,11 @@ REGRAS:
 
                 log("STATE", f"step={state.current_step}")
                 log("TOOL", f"{name} | {arguments}")
+
+                group = TOOL_TO_GROUP.get(name)
+                if group and group != "skills_authoring" and group not in enabled_groups:
+                    enabled_groups.add(group)
+                    log("TOOL_GROUP_ENABLED", f"{group} (chamada a {name})")
 
                 state.start_tool(name, arguments)
 

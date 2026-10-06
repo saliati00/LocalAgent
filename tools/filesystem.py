@@ -2,7 +2,9 @@ import ast
 import os
 from pathlib import Path
 
+from core.backups import backup_file
 from core.paths import (
+    BACKUPS_DIR,
     PROJECT_ROOT,
     PROMPTS_DIR,
     SKILLS_DIR,
@@ -39,6 +41,8 @@ PROTECTED_PATHS = [
     PROMPTS_DIR.resolve(),
     # Tarefas numeradas e seus testes de aceite são definidos pelo usuário.
     TAREFAS_DIR.resolve(),
+    # Backups só são lidos/restaurados pelo usuário (scripts/restaurar.py).
+    BACKUPS_DIR.resolve(),
     # Scripts que o USUÁRIO executa (promoção de Skills, instalação) e dependências.
     (PROJECT_ROOT / "scripts" / "promote_skill.py").resolve(),
     (PROJECT_ROOT / "scripts" / "setup_windows.ps1").resolve(),
@@ -254,6 +258,7 @@ def write_file(path: str, content: str) -> dict:
 
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
+        backup_file(target)
         target.write_text(content, encoding="utf-8")
 
         return {
@@ -330,6 +335,7 @@ def replace_in_file(path: str, target: str, replacement: str) -> dict:
                 "syntax_error": True,
             }
 
+        backup_file(target_file)
         target_file.write_text(new_content, encoding="utf-8")
 
         return {

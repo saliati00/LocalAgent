@@ -98,6 +98,9 @@ Todos os passos da instalação ficam registrados em **`instalacao.log`**. O que
 
 ## Coisas úteis para saber
 
+- **Desfazer uma mudança do agente:** antes de sobrescrever qualquer arquivo, o programa guarda a versão anterior na pasta `backups`. Para ver e restaurar: `.venv\Scripts\python scripts\restaurar.py list` e depois `.venv\Scripts\python scripts\restaurar.py restore "ID"` (copie o ID da lista). Restaurar também guarda a versão atual, então dá para voltar atrás.
+- **O agente tem busca no projeto:** ele consegue procurar um texto nos arquivos sem ler tudo (ferramenta `search_files`), o que economiza memória do modelo.
+
 - **Onde o agente trabalha:** ele só escreve dentro da pasta do projeto (e na pasta temporária do Windows). A pasta `workspace` é o lugar seguro para testar.
 - **Skills novas:** o agente (o modelo mais forte, quando você tiver um) pode **propor** receitas novas, mas elas só passam a valer depois que **você** aprovar:
   - ver rascunhos: `.venv\Scripts\python scripts\promote_skill.py list`

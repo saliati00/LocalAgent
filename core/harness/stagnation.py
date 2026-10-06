@@ -32,6 +32,7 @@ READ_ONLY_TOOLS = {
     "list_directory",
     "read_file",
     "check_tools",
+    "search_files",
     "load_skill",
     "get_project_status",
     "get_memory",

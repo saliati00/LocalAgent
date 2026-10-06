@@ -7,3 +7,4 @@ tasks/task_*.json
 workspace/*
 !workspace/.gitkeep
 instalacao.log
+backups/

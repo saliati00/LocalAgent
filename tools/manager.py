@@ -7,6 +7,7 @@ from tools.filesystem import (
 
 from tools.terminal import run_command
 from tools.environment import check_tools
+from tools.search import search_files
 from core.skills.loader import load_skill
 from core.skills.proposal import propose_skill
 
@@ -139,6 +140,7 @@ TOOLS = {
     "fetch_url": fetch_url,
     "download_file": download_file,
     "check_tools": check_tools,
+    "search_files": search_files,
     "load_skill": load_skill,
     "propose_skill": propose_skill,
     "update_spec_checklist": update_spec_checklist_tool,
@@ -200,6 +202,13 @@ ALLOWED_ARGUMENTS = {
 
     "check_tools": {
         "names",
+    },
+
+    "search_files": {
+        "pattern",
+        "path",
+        "glob",
+        "max_results",
     },
 
     "load_skill": {
@@ -306,6 +315,8 @@ REQUIRED_ARGUMENTS = {
     "check_tools": {
         "names",
     },
+
+    "search_files": set(),
 
     "load_skill": {
         "name",
