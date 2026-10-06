@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core.backups import list_backups, restore_backup  # noqa: E402
-from core.console import ensure_utf8_console  # noqa: E402
+from core.console import ask, ensure_utf8_console  # noqa: E402
 
 
 def cmd_list(limit: int) -> int:
@@ -40,7 +40,7 @@ def cmd_restore(backup_id: str) -> int:
         print("Restaurar exige um terminal interativo. Nada foi alterado.")
         return 1
 
-    answer = input(f"Restaurar '{backup_id}' sobre o arquivo atual? (S/N): ").strip().upper()
+    answer = (ask(f"Restaurar '{backup_id}' sobre o arquivo atual? (S/N): ") or "").strip().upper()
 
     if answer not in {"S", "SIM", "Y", "YES"}:
         print("Cancelado. Nada foi alterado.")

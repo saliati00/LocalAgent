@@ -90,3 +90,35 @@ def test_batch_launchers_set_utf8():
 
         assert "chcp 65001" in text, name
         assert "PYTHONUTF8=1" in text, name
+
+
+def test_ask_returns_none_on_eof_instead_of_crashing(monkeypatch):
+    from core.console import ask
+
+    def raise_eof(*_):
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", raise_eof)
+
+    assert ask("pergunta: ") is None
+
+
+def test_user_scripts_do_not_crash_without_a_terminal():
+    import subprocess
+
+    from core.paths import PROJECT_ROOT
+
+    # No Windows, stdin=DEVNULL (NUL) até se diz "terminal"; o script não pode dar Traceback.
+    result = subprocess.run(
+        [sys.executable, "scripts/restaurar.py", "restore", "20260101-000000-000/nao/existe.txt"],
+        cwd=str(PROJECT_ROOT),
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=60,
+    )
+
+    assert "Traceback" not in result.stderr, result.stderr
+    assert result.returncode == 1

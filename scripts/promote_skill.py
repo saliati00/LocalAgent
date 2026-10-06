@@ -15,7 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from core.console import ensure_utf8_console  # noqa: E402
+from core.console import ask, ensure_utf8_console  # noqa: E402
 from core.skills.proposal import (  # noqa: E402
     list_pending,
     promote_skill,
@@ -86,14 +86,14 @@ def cmd_promote(name: str) -> int:
         print("Promoção exige um terminal interativo. Nada foi alterado.")
         return 1
 
-    answer = input(f"Digite o nome da Skill ('{name}') para PROMOVER, ou ENTER para cancelar: ").strip()
+    answer = (ask(f"Digite o nome da Skill ('{name}') para PROMOVER, ou ENTER para cancelar: ") or "").strip()
 
     if answer != name:
         print("Cancelado. Nada foi alterado.")
         return 1
 
     if info["used_web"]:
-        if input("Digite REVISEI para confirmar que leu a Skill inteira: ").strip() != "REVISEI":
+        if (ask("Digite REVISEI para confirmar que leu a Skill inteira: ") or "").strip() != "REVISEI":
             print("Cancelado. Nada foi alterado.")
             return 1
 

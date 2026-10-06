@@ -25,3 +25,16 @@ def safe_print(text: str = "") -> None:
     except UnicodeEncodeError:
         encoding = getattr(sys.stdout, "encoding", None) or "ascii"
         print(text.encode(encoding, errors="replace").decode(encoding, errors="replace"))
+
+
+def ask(prompt: str) -> str | None:
+    """
+    input() que não derruba o programa quando não há terminal (EOF) ou o usuário
+    aperta Ctrl+C: nesses casos devolve None, que quem chama trata como "cancelar".
+    """
+
+    try:
+        return input(prompt)
+    except (EOFError, KeyboardInterrupt, OSError):
+        print()
+        return None
