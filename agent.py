@@ -186,9 +186,34 @@ TOOLS = [
                     "url": {
                         "type": "string",
                         "description": "URL da página ou documentação para leitura."
+                    },
+                    "max_length": {
+                        "type": "integer",
+                        "description": "Máximo de caracteres retornados (opcional)."
                     }
                 },
                 "required": ["url"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "download_file",
+            "description": "Baixa um arquivo da internet para um destino dentro do projeto ou do diretório temporário. Caminhos protegidos do Harness são recusados e há limite de tamanho.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "URL do arquivo."
+                    },
+                    "destination": {
+                        "type": "string",
+                        "description": "Caminho de destino do arquivo."
+                    }
+                },
+                "required": ["url", "destination"]
             }
         }
     },
@@ -332,6 +357,27 @@ TOOLS = [
                     }
                 },
                 "required": ["name", "role", "backend", "size_gb", "vram_gb", "description", "justification"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_smart_candidate_for_benchmark",
+            "description": "Marca um candidato já registrado como 'selected_for_benchmark'. Não adota o modelo e não autoriza download; a adoção exige benchmark e set_active_smart_model.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "model_name": {
+                        "type": "string",
+                        "description": "Nome do candidato já registrado no Model Registry."
+                    },
+                    "rationale": {
+                        "type": "string",
+                        "description": "Justificativa da seleção para benchmark."
+                    }
+                },
+                "required": ["model_name"]
             }
         }
     },
