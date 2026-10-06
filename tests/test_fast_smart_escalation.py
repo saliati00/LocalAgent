@@ -507,7 +507,7 @@ def test_agent_integration_halts_cleanly_on_stagnation(tmp_path, monkeypatch):
     monkeypatch.setattr(agent.client, "chat", mock_chat)
 
     tasks_dir = tmp_path / "tasks"
-    monkeypatch.setattr("agent.Path", lambda p: tasks_dir if "tasks" in str(p) else Path(p))
+    monkeypatch.setattr(agent, "TASKS_DIR", tasks_dir)
 
     # Executa o agente
     agent.agent("Tarefa de teste de estagnação")

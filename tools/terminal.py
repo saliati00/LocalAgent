@@ -1,10 +1,12 @@
 import os
+import shutil
 import subprocess
 
 from core.harness.permissions import (
     authorize,
     parse_command,
 )
+from core.paths import PROJECT_ROOT, VENV_BIN_DIR
 
 
 INSTALLATION_COMMANDS = {
@@ -18,10 +20,18 @@ INSTALLATION_COMMANDS = {
     "npm",
     "yarn",
     "cargo",
+    "winget",
+    "choco",
+    "scoop",
 }
 
 
 SYSTEM_CHANGE_COMMANDS = {
+    "dnf",
+    "apt",
+    "apt-get",
+    "pacman",
+    "zypper",
     "rpm",
     "sudo",
     "systemctl",
@@ -30,6 +40,18 @@ SYSTEM_CHANGE_COMMANDS = {
     "umount",
     "chmod",
     "chown",
+    # Windows
+    "winget",
+    "choco",
+    "sc",
+    "reg",
+    "regedit",
+    "icacls",
+    "takeown",
+    "netsh",
+    "schtasks",
+    "setx",
+    "bcdedit",
 }
 
 
@@ -41,6 +63,15 @@ DESTRUCTIVE_COMMANDS = {
     "mkfs",
     "fdisk",
     "wipefs",
+    # Windows
+    "del",
+    "erase",
+    "rd",
+    "move",
+    "format",
+    "diskpart",
+    "remove-item",
+    "move-item",
 }
 
 
@@ -85,7 +116,18 @@ def get_command_executables(parts: list[str]) -> list[str]:
             }:
                 break
 
-    return executables
+    return [_normalize_executable(executable) for executable in executables]
+
+
+def _normalize_executable(executable: str) -> str:
+    """Reduz o caminho/nome do executável a 'pip' (sem pasta, .exe e maiúsculas)."""
+
+    name = os.path.basename(executable.replace("\\", "/")).lower()
+
+    if name.endswith(".exe"):
+        name = name[:-4]
+
+    return name
 
 
 def check_constraints(
@@ -247,10 +289,16 @@ def run_command(
 
     try:
         env = os.environ.copy()
-        venv_bin = "/home/bruno/local-agent/.venv/bin"
-        if venv_bin not in env.get("PATH", ""):
-            env["PATH"] = f"{venv_bin}:{env.get('PATH', '')}"
-        env["PYTHONPATH"] = "/home/bruno/local-agent"
+        venv_bin = str(VENV_BIN_DIR)
+        if VENV_BIN_DIR.exists() and venv_bin not in env.get("PATH", ""):
+            env["PATH"] = venv_bin + os.pathsep + env.get("PATH", "")
+        env["PYTHONPATH"] = str(PROJECT_ROOT)
+
+        # No Windows o CreateProcess procura o executável no PATH do processo
+        # atual, não no do env passado; resolve explicitamente (inclui PATHEXT).
+        resolved = shutil.which(parts[0], path=env.get("PATH"))
+        if resolved:
+            parts[0] = resolved
 
         result = subprocess.run(
             parts,
@@ -258,7 +306,7 @@ def run_command(
             text=True,
             timeout=300,
             shell=False,
-            cwd="/home/bruno/local-agent",
+            cwd=str(PROJECT_ROOT),
             env=env,
         )
 

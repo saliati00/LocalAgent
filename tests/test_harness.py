@@ -349,13 +349,13 @@ from tools.terminal import run_command
 def test_run_command_safe():
 
     result = run_command(
-        "uname -a",
-        "Verificar informações do sistema operacional",
+        "python --version",
+        "Verificar a versão do Python",
     )
 
     assert result["success"] is True
     assert result["returncode"] == 0
-    assert "Linux" in result["stdout"]
+    assert "Python" in (result["stdout"] + result["stderr"])
 
 
 def test_run_command_rejects_pipeline():

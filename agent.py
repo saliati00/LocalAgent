@@ -10,6 +10,7 @@ from core.harness.completion import (
     build_continuation_reason,
 )
 from core.harness.logger import log
+from core.harness.permissions import parse_command
 from core.harness.project_progress import (
     extract_project_progress,
     format_project_summary,
@@ -26,6 +27,7 @@ from core.skills.loader import (
     match_skills,
 )
 from tools.manager import execute_tool
+from tools.terminal import check_constraints
 
 
 client = ollama.Client(
@@ -358,106 +360,31 @@ TOOLS = [
 
 
 # =========================================================
-# CLASSIFICAÇÃO DE COMANDOS RESTRITOS
+# RESTRIÇÕES DA TAREFA
 # =========================================================
-
-INSTALLATION_COMMANDS = {
-    "dnf",
-    "apt",
-    "apt-get",
-    "pacman",
-    "zypper",
-    "pip",
-    "pip3",
-    "npm",
-    "yarn",
-    "cargo",
-}
-
-SYSTEM_CHANGE_COMMANDS = {
-    "dnf",
-    "apt",
-    "apt-get",
-    "pacman",
-    "zypper",
-    "rpm",
-    "sudo",
-    "systemctl",
-    "service",
-    "mount",
-    "umount",
-    "chmod",
-    "chown",
-}
-
-DESTRUCTIVE_COMMANDS = {
-    "rm",
-    "rmdir",
-    "mv",
-    "shred",
-    "mkfs",
-    "fdisk",
-    "wipefs",
-}
-
-
-def get_command_executable(command: str) -> str:
-    if not command:
-        return ""
-    try:
-        return command.strip().split()[0]
-    except Exception:
-        return ""
-
 
 def check_task_constraint(
     tool_name: str,
     arguments: dict,
     constraints: TaskConstraints,
 ) -> dict | None:
+    """
+    Aplica as restrições da tarefa a chamadas de run_command.
+
+    Usa a mesma verificação do terminal (que entende wrappers como sudo/env),
+    em vez de olhar só a primeira palavra do comando.
+    """
+
     if tool_name != "run_command":
         return None
 
-    command = arguments.get("command", "")
-    executable = get_command_executable(command)
+    parts, parse_error = parse_command(arguments.get("command", ""))
 
-    if not constraints.allow_install:
-        if executable in INSTALLATION_COMMANDS:
-            return {
-                "success": False,
-                "error": (
-                    "Operação bloqueada pelas restrições da tarefa: "
-                    "instalações não são permitidas."
-                ),
-                "constraint_blocked": True,
-                "tool_error": True,
-            }
+    if parse_error:
+        # run_command devolve o erro de parsing ao modelo.
+        return None
 
-    if not constraints.allow_system_changes:
-        if executable in SYSTEM_CHANGE_COMMANDS:
-            return {
-                "success": False,
-                "error": (
-                    "Operação bloqueada pelas restrições da tarefa: "
-                    "alterações no sistema não são permitidas."
-                ),
-                "constraint_blocked": True,
-                "tool_error": True,
-            }
-
-    if not constraints.allow_destructive:
-        if executable in DESTRUCTIVE_COMMANDS:
-            return {
-                "success": False,
-                "error": (
-                    "Operação bloqueada pelas restrições da tarefa: "
-                    "operações destrutivas não são permitidas."
-                ),
-                "constraint_blocked": True,
-                "tool_error": True,
-            }
-
-    return None
+    return check_constraints(parts, constraints)
 
 
 # =========================================================

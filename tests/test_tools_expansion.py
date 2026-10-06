@@ -149,8 +149,13 @@ def test_fetch_url_empty():
     assert "não fornecida" in result["error"]
 
 
-def test_memory_tools_execution():
+def test_memory_tools_execution(tmp_path, monkeypatch):
+    import tools.manager as manager
+    from core.memory.store import MemoryStore
     from tools.manager import execute_tool
+
+    # Isola do memory/store.json real do projeto.
+    monkeypatch.setattr(manager, "_memory_store", MemoryStore(str(tmp_path / "store.json")))
 
     # Save
     res_save = execute_tool("save_memory", {
