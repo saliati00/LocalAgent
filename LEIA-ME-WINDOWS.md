@@ -111,6 +111,9 @@ Todos os passos da instalação ficam registrados em **`instalacao.log`**. O que
 - **Atualizar o projeto:** se receber uma versão nova da pasta, substitua os arquivos e rode `instalar.bat` de novo (ele reaproveita o que já está instalado).
 - **Desinstalar:** apague a pasta LocalAgent. O Ollama e o modelo ficam no Windows; para remover, use *Configurações → Aplicativos* (Ollama) e a pasta `C:\Users\SEU_USUARIO\.ollama`.
 
+## Primeira rodada de testes
+Depois de instalar, siga o **`ROTEIRO-DE-TESTES.md`** (na mesma pasta). Ele lista, em ordem, o que testar, o que esperar de cada teste e uma tabela para você preencher e me mostrar.
+
 ## Resumo de 10 segundos
 
 1. Copie a pasta → 2. `instalar.bat` → 3. `verificar.bat` → 4. `iniciar.bat` e escreva o que quer.
