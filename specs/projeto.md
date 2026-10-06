@@ -1531,7 +1531,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-371 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+382 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1757,6 +1757,7 @@ Achados de uma simulação de clone limpo (06/10/2026), já corrigidos:
 * **Console do Windows:** um `print` com "→", "✓" ou emoji derrubava o agente em console cp1252/cp850 (inclusive a tela de confirmação). Corrigido com `core/console.py` (`safe_print`, `ensure_utf8_console`) e `chcp 65001` + `PYTHONUTF8=1` nos `.bat`.
 * **Prompt fixo acima da janela:** uma tarefa numerada estimava 8363 tokens para 8192 (102%) antes de qualquer conversa. Medidas: system prompt compacto para tarefas numeradas (resumo do checklist fora e Skills só como índice), memória persistente limitada a 1500 caracteres (entradas mais recentes primeiro), orçamento de Skills de 3500 caracteres, descrições do schema de tools abreviadas, regras mais curtas. Resultado estimado na época: tarefa numerada 53%, tarefa simples ~60% e desenvolvimento ~70% da janela (superado pelo capítulo 47: 30%, 28% e 65%) (estimativa de 3 caracteres por token; confirmar com `PROMPT_SIZES`). O Harness registra `PROMPT_TOO_BIG` quando o prompt fixo passa de 70%.
 * **Proteções adicionais:** os scripts que o usuário executa (`scripts/promote_skill.py`, instalador e `.bat`) e os `requirements*.txt` ficaram fora do alcance das tools do agente.
+* **Tempo e velocidade nos logs:** cada linha `TOKENS` registra `seconds` (tempo da chamada) e `tok_s` (tokens por segundo gerados, usando o `eval_duration` do Ollama quando disponível); `scripts/summarize_logs.py` mostra média, mínimo e máximo. Ctrl+C no terminal interrompe só a tarefa atual (`INTERRUPTED` no log).
 * **Roteiro de testes no PC alvo:** `ROTEIRO-DE-TESTES.md` descreve a primeira rodada de testes do usuário (instalação, tarefas pequenas, tarefa 1 com aceite, repetição e loops, velocidade, segurança e tarefa 2) com tabela de resultados; a tarefa 04 aponta para ele.
 * **Resumo de logs:** `scripts/summarize_logs.py` consolida `PROMPT_SIZES`, tokens, avisos de contexto, escaladas e `needs_human`.
 

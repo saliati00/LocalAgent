@@ -31,6 +31,27 @@ def context_pressure(prompt_tokens: int, num_ctx: int) -> str:
     return "ok"
 
 
+def tokens_per_second(eval_count: int, eval_duration_ns, elapsed_seconds: float) -> float | None:
+    """
+    Velocidade de geração. Prefere o tempo de geração que o Ollama informa
+    (eval_duration, em nanossegundos); sem ele, usa o tempo total da chamada.
+    """
+
+    if not eval_count or eval_count <= 0:
+        return None
+
+    try:
+        if eval_duration_ns and eval_duration_ns > 0:
+            return eval_count / (eval_duration_ns / 1e9)
+    except TypeError:
+        pass
+
+    if elapsed_seconds and elapsed_seconds > 0:
+        return eval_count / elapsed_seconds
+
+    return None
+
+
 def estimate_tokens(text: str) -> int:
     return int(len(text or "") / CHARS_PER_TOKEN)
 

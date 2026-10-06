@@ -39,5 +39,9 @@ def test_roadmap_covers_the_key_checks():
         "agent.py",
         "test_aceite_tarefa02.py",
         "Tabela de resultados",
+        "@iniciar-desenvolvimento",
+        "Pesquise na internet",
+        "Como vou ler os resultados",
+        "tokens por segundo",
     ):
         assert expected in text, expected

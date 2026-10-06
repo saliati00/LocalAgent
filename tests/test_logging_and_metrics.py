@@ -62,3 +62,64 @@ def test_fast_model_does_not_receive_propose_skill_schema():
     assert "propose_skill" not in fast
     assert "propose_skill" in smart
     assert smart - fast == {"propose_skill"}
+
+
+# ---------------------------------------------------------
+# Velocidade de geração
+# ---------------------------------------------------------
+
+def test_tokens_per_second_prefers_the_ollama_generation_time():
+    from core.context.metrics import tokens_per_second
+
+    # 50 tokens em 2 s de geração (2e9 ns), mesmo que a chamada toda tenha levado 10 s
+    assert tokens_per_second(50, 2_000_000_000, 10.0) == 25.0
+
+
+def test_tokens_per_second_falls_back_to_wall_time_and_handles_missing_data():
+    from core.context.metrics import tokens_per_second
+
+    assert tokens_per_second(50, None, 5.0) == 10.0
+    assert tokens_per_second(50, 0, 5.0) == 10.0
+    assert tokens_per_second(0, 1_000_000_000, 5.0) is None
+    assert tokens_per_second(50, None, 0) is None
+
+
+def test_agent_logs_seconds_and_speed_per_model_call(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    import agent
+    from core.harness import logger
+
+    response = SimpleNamespace(
+        message=SimpleNamespace(role="assistant", content="ok", tool_calls=None),
+        prompt_eval_count=500,
+        eval_count=40,
+        eval_duration=2_000_000_000,
+    )
+
+    monkeypatch.setattr(agent.client, "chat", lambda *a, **k: response)
+    monkeypatch.setattr(agent, "TASKS_DIR", tmp_path / "tasks")
+    monkeypatch.setattr(agent, "check_completion", lambda **kw: {"status": "complete", "reason": "ok"})
+
+    agent.agent("Diga ok")
+
+    line = [l for l in logger.LOG_FILE.read_text(encoding="utf-8").splitlines() if " TOKENS | " in l][0]
+
+    assert "seconds=" in line
+    assert "tok_s=20.0" in line
+
+
+def test_summarize_logs_reports_speed_and_call_time():
+    from scripts import summarize_logs
+
+    lines = [
+        "[2026-10-06 10:00:00] [aaaa1111] TOKENS | input=2000 | output=40 | total=2040 | seconds=6.0 | tok_s=20.0",
+        "[2026-10-06 10:00:10] [aaaa1111] TOKENS | input=2100 | output=30 | total=2130 | seconds=4.0 | tok_s=10.0",
+        "[2026-10-06 10:00:20] [bbbb2222] TOKENS | input=2200 | output=20 | total=2220",
+    ]
+
+    report = summarize_logs.summarize(lines)
+
+    assert report["generation_tokens_per_second"] == {"count": 2, "avg": 15.0, "min": 10.0, "max": 20.0}
+    assert report["seconds_per_call"]["avg"] == 5.0
+    assert report["model_calls"] == 3

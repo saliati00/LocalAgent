@@ -1,6 +1,7 @@
 import datetime
 import json
 import re
+import time
 from pathlib import Path
 from core.paths import PROJECT_ROOT, PROJECT_SPEC_PATH, TASKS_DIR
 from core.prompts import list_prompts, load_prompt
@@ -13,7 +14,12 @@ from core.harness.completion import (
     build_continuation_reason,
 )
 from core.console import ensure_utf8_console
-from core.context.metrics import context_pressure, describe_prompt_sections, estimate_tokens
+from core.context.metrics import (
+    context_pressure,
+    describe_prompt_sections,
+    estimate_tokens,
+    tokens_per_second,
+)
 from core.harness.handover import build_handover_packet
 from core.harness.logger import log, new_run_id
 from core.harness.memo import ToolMemo
@@ -1180,6 +1186,8 @@ REGRAS:
         prepared_messages = context_mgr.prepare_messages(messages)
 
         try:
+            call_started = time.monotonic()
+
             response = client.chat(
                 model=active_model,
                 messages=prepared_messages,
@@ -1188,11 +1196,20 @@ REGRAS:
                 options={"num_ctx": NUM_CTX},
             )
 
+            call_seconds = time.monotonic() - call_started
+            speed = tokens_per_second(
+                response.eval_count or 0,
+                getattr(response, "eval_duration", None),
+                call_seconds,
+            )
+
             log(
                 "TOKENS",
                 f"input={response.prompt_eval_count or 0} | "
                 f"output={response.eval_count or 0} | "
-                f"total={(response.prompt_eval_count or 0) + (response.eval_count or 0)}"
+                f"total={(response.prompt_eval_count or 0) + (response.eval_count or 0)} | "
+                f"seconds={call_seconds:.1f} | "
+                f"tok_s={'-' if speed is None else format(speed, '.1f')}"
             )
 
             pressure = context_pressure(response.prompt_eval_count or 0, NUM_CTX)
@@ -1572,8 +1589,11 @@ def resolve_prompt(text: str) -> str | None:
     return content
 
 
-if __name__ == "__main__":
-    ensure_utf8_console()
+def interactive_loop(read=input) -> None:
+    """
+    Loop de tarefas do terminal. Ctrl+C durante uma tarefa a interrompe (ela fica
+    registrada no log) e volta ao prompt, em vez de fechar o programa com erro.
+    """
 
     saved = ", ".join(f"@{name}" for name in list_prompts())
 
@@ -1586,7 +1606,11 @@ if __name__ == "__main__":
         print(f"Tarefas numeradas: {numbered}  (ex.: dê continuidade à tarefa 2)")
 
     while True:
-        typed = input("\nTarefa (ENTER vazio para sair): ")
+        try:
+            typed = read("\nTarefa (ENTER vazio para sair): ")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
 
         if not typed.strip():
             break
@@ -1596,4 +1620,13 @@ if __name__ == "__main__":
         if prompt is None:
             continue
 
-        agent(prompt)
+        try:
+            agent(prompt)
+        except KeyboardInterrupt:
+            log("INTERRUPTED", "tarefa interrompida pelo usuário (Ctrl+C)")
+            print("\n[INTERROMPIDO] Tarefa interrompida. Você pode pedir outra.")
+
+
+if __name__ == "__main__":
+    ensure_utf8_console()
+    interactive_loop()

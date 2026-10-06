@@ -17,6 +17,8 @@ from core.console import ensure_utf8_console  # noqa: E402
 
 LOG_LINE = re.compile(r"^\[[^\]]+\] (?:\[([^\]]+)\] )?(\w+)(?: \| (.*))?$")
 TOKENS = re.compile(r"input=(\d+) \| output=(\d+)")
+SECONDS = re.compile(r"seconds=([\d.]+)")
+TOK_S = re.compile(r"tok_s=([\d.]+)")
 
 EVENTS_OF_INTEREST = (
     "CONTEXT_NEAR_LIMIT",
@@ -37,6 +39,8 @@ def summarize(lines: list[str]) -> dict:
     events: Counter = Counter()
     inputs: list[int] = []
     outputs: list[int] = []
+    seconds_per_call: list[float] = []
+    speeds: list[float] = []
     prompt_totals: list[int] = []
     sections: dict[str, list[int]] = {}
     runs: set[str] = set()
@@ -60,6 +64,14 @@ def summarize(lines: list[str]) -> dict:
                 inputs.append(int(found.group(1)))
                 outputs.append(int(found.group(2)))
 
+            timing = SECONDS.search(details)
+            if timing:
+                seconds_per_call.append(float(timing.group(1)))
+
+            speed = TOK_S.search(details)
+            if speed:
+                speeds.append(float(speed.group(1)))
+
         if event == "PROMPT_SIZES":
             try:
                 report = json.loads(details)
@@ -81,11 +93,25 @@ def summarize(lines: list[str]) -> dict:
         "model_calls": len(inputs),
         "input_tokens": _stats(real_inputs),
         "output_tokens": _stats(outputs),
+        "seconds_per_call": _float_stats(seconds_per_call),
+        "generation_tokens_per_second": _float_stats(speeds),
         "prompt_estimate_tokens": _stats(prompt_totals),
         "prompt_sections_avg_tokens": {
             name: round(sum(values) / len(values)) for name, values in sections.items()
         },
         "events": {name: events[name] for name in EVENTS_OF_INTEREST if events[name]},
+    }
+
+
+def _float_stats(values: list[float]) -> dict:
+    if not values:
+        return {}
+
+    return {
+        "count": len(values),
+        "avg": round(sum(values) / len(values), 1),
+        "min": round(min(values), 1),
+        "max": round(max(values), 1),
     }
 
 
@@ -113,6 +139,14 @@ def print_report(report: dict) -> None:
         stats = report[key]
         if stats:
             print(f"- {label}: média {stats['avg']}, máximo {stats['max']} ({stats['count']} medições)")
+
+    speed = report["generation_tokens_per_second"]
+    if speed:
+        print(f"- velocidade de geração: média {speed['avg']} tokens/s (mín {speed['min']}, máx {speed['max']})")
+
+    seconds = report["seconds_per_call"]
+    if seconds:
+        print(f"- tempo por chamada ao modelo: média {seconds['avg']} s (máx {seconds['max']} s)")
 
     if report["prompt_sections_avg_tokens"]:
         print("- tokens médios por seção do prompt:")

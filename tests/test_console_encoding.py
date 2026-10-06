@@ -122,3 +122,32 @@ def test_user_scripts_do_not_crash_without_a_terminal():
 
     assert "Traceback" not in result.stderr, result.stderr
     assert result.returncode == 1
+
+
+def test_interactive_loop_survives_ctrl_c_during_a_task(monkeypatch):
+    import agent
+
+    calls = []
+
+    def fake_agent(prompt):
+        calls.append(prompt)
+
+        if len(calls) == 1:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(agent, "agent", fake_agent)
+
+    inputs = iter(["Faça algo", "Faça outra coisa", ""])
+
+    agent.interactive_loop(read=lambda _prompt: next(inputs))
+
+    assert calls == ["Faça algo", "Faça outra coisa"]
+
+
+def test_interactive_loop_exits_cleanly_on_eof(monkeypatch):
+    import agent
+
+    def eof(_prompt):
+        raise EOFError
+
+    agent.interactive_loop(read=eof)
