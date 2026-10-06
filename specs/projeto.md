@@ -155,7 +155,7 @@ Hardware inicial:
 * CPU: Ryzen 5 5600G
 * GPU: NVIDIA RTX 3070 8 GB
 * Sistema: Windows 10/11 (migrado de Fedora KDE)
-* RAM: utilizar toda a RAM disponível para permitir CPU offload quando necessário.
+* RAM: utilizar a RAM disponível para permitir CPU offload quando necessário (com 16 GB isso é arriscado; ver capítulo 40 e `specs/ambiente.md`).
 
 O projeto deve considerar que:
 
@@ -730,7 +730,7 @@ Exemplo de Skill de mods:
 
 Skills devem ser tratadas como procedimentos operacionais.
 
-O projeto já possui um mecanismo inicial de carregamento de Skills e uma Skill de gerenciamento de ambiente.
+O projeto já possui carregamento de Skills, Skills de ambiente, Linux e Windows, orçamento de contexto para Skills (o excedente vira índice e é lido com `load_skill`) e um fluxo seguro para o agente propor Skills novas (capítulo 42).
 
 ---
 
@@ -761,6 +761,8 @@ acesso irrestrito a arquivos do sistema
 ```
 
 O Harness deve controlar as permissões.
+
+Procedimento seguro adotado: o agente só se expande criando Skills, em forma de rascunho, com revisão humana antes de ativá-las (capítulo 42).
 
 ---
 
@@ -1138,6 +1140,26 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 
 ---
 
+## FASE 11 — ESTABILIZAÇÃO (contexto, avaliação e autoexpansão segura)
+
+> Posicionada antes da FASE 2 de propósito (o Harness escolhe a próxima pendência pela ordem do arquivo). Cada item declara "pronto quando".
+
+* [x] Log com run_id e tamanho das seções do prompt (pronto quando: pytest tests/test_logging_and_metrics.py passa)
+* [x] Contrato entre schema de tools e dispatch (pronto quando: pytest tests/test_tool_contract.py passa)
+* [x] Proteção dos arquivos do Harness contra tools genéricas (pronto quando: pytest tests/test_file_protection.py passa)
+* [x] Escalada com pacote de passagem, retorno ao FAST e estado needs_human (pronto quando: pytest tests/test_agent_escalation_flow.py passa)
+* [x] Cache de ferramentas de leitura e ferramenta check_tools (pronto quando: pytest tests/test_handover_memo_repetition.py tests/test_check_tools.py passa)
+* [x] Orçamento de Skills no prompt e carregamento sob demanda (pronto quando: pytest tests/test_skill_expansion.py passa)
+* [x] Autoexpansão segura de Skills com rascunho, validação e promoção humana (pronto quando: pytest tests/test_skill_expansion.py passa)
+* [x] Instalador Windows de um clique e manual (pronto quando: powershell -File scripts/setup_windows.ps1 -DryRun termina sem erro)
+* [ ] Medir no PC alvo o consumo real do prompt e mantê-lo abaixo de 60% da janela (pronto quando: PROMPT_SIZES de 10 tarefas reais mostram est_tokens total menor que 0,6 de NUM_CTX)
+* [ ] Criar o conjunto de avaliação com 10 a 20 tarefas reais e critério de aceite executável (pronto quando: um script de avaliação roda todas as tarefas e imprime a taxa de sucesso)
+* [ ] Comparar FAST sozinho, FAST com think, SMART sozinho e cascata com o conjunto de avaliação (pronto quando: a tabela de resultados está registrada em specs/avaliacoes.md)
+* [ ] Substituir o juiz de conclusão por LLM por critério de aceite executável nas tarefas de desenvolvimento (pronto quando: a tarefa só conclui se o comando de aceite retornar 0)
+* [ ] Limitar e revisar a memória persistente (pronto quando: save_memory recusa valores acima do limite e entradas de decisão exigem revisão)
+
+---
+
 ## FASE 2 — SMART — Seleção do Modelo Especialista
 
 > **Contrato desta fase:**
@@ -1419,6 +1441,8 @@ Configuração atualmente conhecida:
 * VRAM observada durante execução: aproximadamente 5.5 GB
 * Execução: GPU NVIDIA
 
+Detalhes e atualização do ambiente: `specs/ambiente.md`.
+
 ---
 
 # 35. EXPERIMENTOS ARQUITETURAIS
@@ -1499,7 +1523,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-196 testes aprovados (pytest, pasta tests/)
+244 testes aprovados (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1570,3 +1594,113 @@ Hardening associado (ver `specs/auditoria_arquitetural.md`):
 * O schema de tools exposto ao modelo é validado contra o dispatch por teste de contrato.
 * `find` só é seguro sem `-delete`/`-exec`; `pytest` só é seguro para `tests/` e sem plugins/configuração externa.
 * Restrições de tarefa (`allow_install`, `allow_system_changes`, `allow_destructive`) passam a valer de fato no fluxo do agente.
+
+
+---
+
+# 39. EVIDÊNCIAS DOS LOGS (02 a 03/10/2026)
+
+Análise de `logs/agent.log` (56 execuções; 7 são testes automatizados, restando 49 execuções reais).
+
+* Tarefas pequenas e fechadas (verificar um arquivo, criar `calc.py` com teste, pesquisar uma URL) concluem em 1 a 3 iterações.
+* Cerca de 25 execuções de "Continue o desenvolvimento..." terminaram em cancelamento, no limite de 31 iterações ou em loop.
+* Quatro execuções seguidas (03/10, 18:50 a 19:14) bateram 31 iterações com 0 a 2 falhas, repetindo leituras (`get_model_registry` de 7 a 12 vezes, `get_project_status`, `get_memory`) sem produzir nada.
+* A tarefa `sudo dnf install git` gastou 31 iterações repetindo "preciso da senha". Nem o modelo nem o Harness entendiam "bloqueado, parar e esperar o humano".
+* A verificação de ambiente fez 24 a 29 chamadas `command -v X`, uma por ferramenta.
+* **Contexto estourado:** 144 de 406 chamadas reais ao modelo (35%) usaram 7000 ou mais tokens de uma janela de 8192 (máximo 8173, média 4873). Acima do `num_ctx` o Ollama descarta o início da conversa, inclusive o objetivo.
+* Em tarefas de desenvolvimento o prompt carregava as Skills `development`, `environment` e `models`: cerca de 15,5 mil caracteres (~5 mil tokens), mais da metade da janela.
+* O juiz de conclusão (um LLM) registrou `DONE` em etapas que falharam (ex.: "registrada no checklist: 'web_search falhou'").
+* Cada resposta de texto dispara uma chamada extra ao modelo ativo para o juiz de conclusão.
+* Nestes logs, nenhuma execução mostra o agente local construindo um componente real do projeto. O único código criado foi `scripts/calc.py` com um teste.
+
+Conclusão: o gargalo não é falta de componentes, é contexto, critério de "pronto" e falta de medição. As medidas adotadas estão nos capítulos 41 a 44 e na FASE 11 do checklist.
+
+---
+
+# 40. LIMITES REALISTAS DO HARDWARE
+
+Valores marcados como estimativa devem ser confirmados por medição (FASE 11).
+
+* Hardware de referência: ver `specs/ambiente.md` (Ryzen 5 5600G, RTX 3070 8 GB, 16 GB de RAM).
+* Um modelo de ~8B em Q4 cabe inteiro na VRAM (~5,5 GB observados) e responde rápido.
+* Um modelo de ~14B em Q4 (~9 GB) exige offload parcial para a RAM. Estimativa: de poucos tokens/s a ~10 tokens/s, adequado para uso curto e pontual, não para operar em loop.
+* Modelos de 20B ou mais não são úteis como "HEAVY" neste hardware. A Fase 8 deve confirmar isso manualmente, sem automação.
+* O KV cache é específico de cada modelo e **não pode ser compartilhado** entre FAST e SMART. Cada troca de modelo recarrega os pesos e reprocessa o prompt inteiro. Por isso a escalada deve ser rara, curta e começar de um resumo (capítulo 41).
+* Quantizar modelos localmente não é prático (um 14B em fp16 tem ~28 GB). Usar GGUFs já quantizados.
+* "Usar toda a RAM disponível" (capítulo 3) é arriscado com 16 GB e Windows em uso.
+* Upgrade de melhor custo-benefício: 32 GB de RAM. Ele não acelera um 14B denso, mas abre modelos MoE, que rodam bem melhor em CPU/RAM.
+* Tamanho de contexto: manter `NUM_CTX` conservador e o prompt abaixo de ~60% da janela (medido por `PROMPT_SIZES`).
+
+---
+
+# 41. FAST + SMART: COMPORTAMENTO IMPLEMENTADO
+
+O FAST opera e conversa; o SMART é um consultor curto, não um segundo operador permanente.
+
+* FAST é o padrão. A escalada é reativa: 3 erros consecutivos, ou 18 iterações com mais de 5 falhas, ou 6 ciclos de estagnação.
+* Ao escalar, o detector de estagnação é reiniciado e o SMART recebe um **pacote de passagem** montado pelo Harness (`core/harness/handover.py`, até 3500 caracteres): objetivo, motivo, fase, pendência, ações já concluídas, últimos resultados de ferramentas e erros recentes. Ele **não** herda o histórico (e os loops) do FAST.
+* O SMART tem tempo limitado: volta ao FAST quando destrava a etapa (progresso real) ou depois de `SMART_MAX_ITERATIONS` (8) iterações, também com um pacote de passagem.
+* Mais de `MAX_ESCALATIONS` (3) escaladas, ou um SMART que também estagna, terminam em `needs_human`.
+* Estados terminais distintos: `completed`, `cancelled` (o usuário recusou), `needs_human` (depende de uma ação do usuário), `blocked`, `failed` e `smart_unavailable`.
+* Três respostas de texto praticamente iguais seguidas (similaridade de 0,9 ou mais) terminam em `needs_human`.
+* Ferramentas de leitura (`get_model_registry`, `get_project_status`, `get_memory`, `read_file`, `list_directory`, `check_tools`, `load_skill`) são memoizadas por tarefa e o cache é invalidado por qualquer ferramenta que altere estado. A ferramenta `check_tools` verifica N executáveis numa só chamada.
+* O prompt tem orçamento: as Skills ocupam até `SKILLS_BUDGET_CHARS` (7000 caracteres); o excedente entra como índice e o modelo lê o resto com `load_skill`.
+* Cada linha de log carrega o `run_id`, e cada tarefa registra `PROMPT_SIZES` (tamanho por seção do prompt).
+
+Pendências desta arquitetura (FASE 11):
+
+* Prefixo do prompt estável (sem timestamps) para aproveitar o cache de prefixo do Ollama. Não medido.
+* Avaliar um SMART da mesma família do FAST (por exemplo, um 14B da família Qwen3, se disponível) e o próprio FAST com `think=True` como baseline, em vez de assumir `qwen2.5-coder:14b`.
+* O `llama-server` (llama.cpp) permite salvar e restaurar o KV de um slot em disco; avaliar isso como motivo concreto para a Fase 3. O Ollama não expõe isso.
+* Substituir o juiz de conclusão por LLM por critério de aceite executável (capítulo 44).
+
+---
+
+# 42. AUTOEXPANSÃO SEGURA
+
+O agente pode se expandir **criando Skills** (texto, sem execução). Ele **nunca** altera o Harness, as permissões, os testes nem Skills ativas.
+
+Fluxo: `rascunho` → `revisão humana` → `ativa` (mesma lógica de "descoberta ≠ adoção" dos modelos).
+
+1. Só o modelo SMART pode propor, com a ferramenta `propose_skill`. O FAST recebe uma recusa do Harness.
+2. O rascunho é gravado em `skills_pending/<nome>/SKILL.md`, gerado por código a partir de campos estruturados (nome, descrição, gatilhos, quando usar, passos, como validar, limites, tools). Rascunhos nunca são carregados nem casados com tarefas.
+3. O validador (`core/skills/validator.py`) recusa: nome inválido, mais de 2400 caracteres, descrição acima de 160, menos de 1 ou mais de 12 gatilhos, tools inexistentes, seções obrigatórias ausentes e trechos que enfraquecem regras (ignorar regras/restrições, desativar confirmação, "sem confirmação" quando afirmativo, `allow_install`/`allow_system_changes`/`allow_destructive`, `| sh`, `iex`). Negações ("Não baixa nada sem confirmação") são aceitas.
+4. O Harness, não o modelo, informa `used_web`. Skills de tarefas que usaram `web_search`, `fetch_url` ou `download_file` pedem confirmação extra na promoção (risco de prompt injection).
+5. A promoção é humana: `python scripts/promote_skill.py list | show | promote | reject`. Promover exige terminal interativo e digitar o nome; a validação roda de novo. Rejeitados vão para `skills_pending/_rejected/`.
+6. `skills/` e `skills_pending/` são protegidos contra `write_file`, `replace_in_file` e `download_file`.
+7. Gatilhos de Skills novas vêm do cabeçalho da própria Skill. As nativas continuam usando `core/skills/loader.py`.
+8. Sugestão de uso: criar uma Skill depois de um procedimento que funcionou de verdade em duas ou mais tarefas, ou quando uma tarefa falhou por falta de conhecimento. Cada promoção deve virar um commit.
+
+Próximos degraus (não implementados): scripts auxiliares dentro de uma Skill, sempre executados por `run_command` com confirmação; ferramentas novas em `tools/plugins/` somente com sandbox e testes escritos pelo usuário. O Harness fica fora de todos os degraus.
+
+Pendência: a memória persistente (`save_memory`) também entra no prompt e hoje não tem limite nem revisão. Aplicar limite de tamanho e revisão das entradas de decisão.
+
+---
+
+# 43. ESCOPO REVISADO
+
+Esta tabela orienta o que o agente e o usuário devem priorizar. O agente **não deve iniciar** itens marcados como cortados ou adiados.
+
+| Bloco | Decisão | Motivo |
+|---|---|---|
+| Harness, permissões, Task State, Skills | Manter e estabilizar | Já existem; o problema é contexto e critério de pronto |
+| FAST + SMART com passagem de resumo | Manter | Capítulo 41 |
+| Comparar llama.cpp com Ollama (Fase 3) | Adiar | Só se o Ollama não atender (ver o ponto do KV em disco no capítulo 41) |
+| Benchmark de contexto automatizado | Adiar | Medição manual basta para este hardware |
+| Model Scout automático (Fase 7) | Cortar | O universo útil em 8 GB de VRAM é pequeno; escolha manual |
+| Quantização local própria | Cortar | Usar GGUFs prontos |
+| Descobrir o teto do hardware (Fase 8) | Fazer manualmente | Uma tarde de testes |
+| Interface web (Fase 9) | Reaproveitar uma existente | Cap. 2.4; reavaliar Open WebUI e, com o 14B, OpenCode/Aider |
+| GUI, visão e automação de mouse (Fase 10) | Cortar | Fora do alcance de modelos de 8B a 14B locais |
+| Autoexpansão | Somente Skills, com revisão humana | Capítulo 42 |
+
+---
+
+# 44. DEFINIÇÃO DE PRONTO E ORGANIZAÇÃO
+
+* Cada item novo do checklist deve declarar **"pronto quando: <comando verificável>"**. Meta: o Harness marcar `[x]` quando o comando retornar 0, no lugar do juiz por LLM. Hoje o gate de aceitação cobre só alguns itens (seleção de candidato SMART e relacionados).
+* Tarefas de desenvolvimento devem ser **unidades pequenas e test-first**: objetivo, arquivos permitidos e um comando de aceite; o usuário escreve o teste e o agente implementa até ficar verde.
+* O checklist permanece neste arquivo porque o Harness lê `specs/projeto.md`. O hardware e o ambiente ficam em `specs/ambiente.md`, para serem atualizados ao trocar de máquina.
+* A FASE 11 (estabilização) foi posicionada antes da FASE 2 de propósito: o Harness escolhe a próxima pendência pela ordem do arquivo. A numeração não foi alterada para não quebrar nomes usados pelo Harness.
+* Operação no Windows: `instalar.bat`, `verificar.bat`, `iniciar.bat` e `LEIA-ME-WINDOWS.md`.
+* Decisões em aberto: quem promove Skills (hoje, só o usuário); política de memória; escolha do candidato SMART por medição; quando publicar estas alterações no GitHub.

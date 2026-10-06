@@ -1,5 +1,4 @@
 import py_compile
-from pathlib import Path
 
 from core.paths import PROJECT_ROOT
 
@@ -16,7 +15,7 @@ def test_every_python_file_compiles():
             continue
 
         try:
-            py_compile.compile(str(path), doraise=True, cfile=str(Path("nul")) if False else None)
+            py_compile.compile(str(path), doraise=True)
         except py_compile.PyCompileError as error:
             failures.append(f"{path.relative_to(PROJECT_ROOT)}: {error.msg}")
 
