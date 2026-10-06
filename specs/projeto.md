@@ -1525,7 +1525,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-261 testes aprovados (pytest, pasta tests/)
+285 testes aprovados (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1706,3 +1706,36 @@ Esta tabela orienta o que o agente e o usuário devem priorizar. O agente **não
 * A FASE 11 (estabilização) foi posicionada antes da FASE 2 de propósito: o Harness escolhe a próxima pendência pela ordem do arquivo. A numeração não foi alterada para não quebrar nomes usados pelo Harness.
 * Operação no Windows: `instalar.bat`, `verificar.bat`, `iniciar.bat` e `LEIA-ME-WINDOWS.md`.
 * Decisões em aberto: quem promove Skills (hoje, só o usuário); política de memória; escolha do candidato SMART por medição; quando publicar estas alterações no GitHub.
+
+---
+
+# 45. LIÇÕES DE PROJETOS PARECIDOS (pesquisa de 06/10/2026)
+
+Pesquisa feita por agentes de busca; as fontes não foram reabertas uma a uma. Itens marcados como hipótese precisam ser medidos antes de virar regra.
+
+Confirmado por fontes primárias (docs, READMEs, issues, papers):
+
+* Prompts grandes derrubam agentes com modelo local: o Cline criou um "compact prompt" (~10% do normal) e o Roo Code desistiu de suportar prompt grande; o OpenHands pede 22 a 32k de contexto.
+* O Ollama pode truncar o início da conversa em silêncio quando o prompt passa do `num_ctx` (relatos no Goose e em issues de terceiros). Com `ollama.chat` na API nativa o `num_ctx` informado vale.
+* Tool calling é o gargalo dos modelos abertos pequenos (Goose: 14B ficaram 50% ou mais piores que um modelo de ponta).
+* Juízes LLM de "concluído" erram muito (arXiv 2606.09863): 45 a 48% das falhas são falso sucesso; com verificação independente cai para ~3%.
+* Detector de travamento do OpenHands: mesma ação com erro 3 vezes, alternância A-B por 6 ciclos, mesma ação e observação 4 vezes.
+* Skills públicas têm risco real (Snyk, fev/2026: 36,8% de 3.984 Skills com falha).
+
+Hipóteses a medir:
+
+* Issue do Ollama #14601 (mar/2026): com `qwen3:8b` e o parâmetro `tools`, tool calls anteriores do assistente somem do histórico, o que explicaria loops de repetição. Registrar a versão do Ollama no PC alvo.
+* `OLLAMA_FLASH_ATTENTION=1` com `OLLAMA_KV_CACHE_TYPE=q8_0` para subir o contexto para 12 a 16k; efeito na precisão de tool calling não medido.
+* Expor de 5 a 8 tools por turno (hoje o FAST vê ~20, ~2,9 mil tokens).
+* Formato de edição `whole` para arquivos pequenos (um relato mostrou 0 para 100 de acerto ao trocar de `diff`).
+* Escrita compacta de prompts, schemas e Skills (menos tokens por instrução) como alternativa a cortar conteúdo.
+
+Já implementado a partir desta pesquisa:
+
+* Detector de travamento com os limiares acima (`core/harness/stagnation.py`).
+* Detecção de truncamento do contexto pelo `prompt_eval_count` (`CONTEXT_NEAR_LIMIT` e `CONTEXT_TRUNCATED` no log, com compactação forçada).
+* Teto de saída em `read_file` (8000 caracteres) e `list_directory` (200 itens), com aviso para usar `start_line` e `end_line`.
+* Validação de sintaxe Python em `write_file` e `replace_in_file`: a escrita inválida é recusada e o arquivo não muda.
+* Validador de Skills recusa Unicode invisível, trechos base64 e URLs em rascunhos.
+
+Ainda não implementado: reduzir tools por turno, substituir o juiz de conclusão, conjunto de avaliação, escrita compacta de prompts.

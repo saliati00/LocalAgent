@@ -10,7 +10,7 @@ from core.harness.completion import (
     check_completion,
     build_continuation_reason,
 )
-from core.context.metrics import describe_prompt_sections
+from core.context.metrics import context_pressure, describe_prompt_sections
 from core.harness.handover import build_handover_packet
 from core.harness.logger import log, new_run_id
 from core.harness.memo import ToolMemo
@@ -984,6 +984,16 @@ REGRAS FUNDAMENTAIS DE EXECUÇÃO
                 f"output={response.eval_count or 0} | "
                 f"total={(response.prompt_eval_count or 0) + (response.eval_count or 0)}"
             )
+
+            pressure = context_pressure(response.prompt_eval_count or 0, NUM_CTX)
+
+            if pressure != "ok":
+                log(
+                    "CONTEXT_" + pressure.upper(),
+                    f"prompt={response.prompt_eval_count} de {NUM_CTX} tokens. "
+                    "O Ollama pode estar descartando o início da conversa; pedindo compactação.",
+                )
+                context_mgr.request_compaction()
 
         except Exception as e:
             state.fail(f"Erro ao consultar o modelo: {e}")

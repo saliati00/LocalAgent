@@ -22,6 +22,12 @@ class ContextManager:
         self.max_repeated_tool_calls = max_repeated_tool_calls
         self.tool_history: list[dict] = []
         self.compaction_count: int = 0
+        self.compaction_requested: bool = False
+
+    def request_compaction(self) -> None:
+        """Pede compactação na próxima preparação, mesmo abaixo do limite de caracteres."""
+
+        self.compaction_requested = True
 
     def _normalize_arguments(self, name: str, arguments: dict) -> dict:
         if not isinstance(arguments, dict):
@@ -205,6 +211,7 @@ Continue a execução a partir do estado atual e das mensagens recentes abaixo.
         """
         Prepara as mensagens antes de enviar ao modelo, aplicando compactação se necessário.
         """
-        if self.should_compact(messages):
+        if self.compaction_requested or self.should_compact(messages):
+            self.compaction_requested = False
             return self.compact(messages)
         return messages

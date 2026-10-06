@@ -1,3 +1,4 @@
+import ast
 import os
 from pathlib import Path
 
@@ -32,6 +33,26 @@ PROTECTED_PATHS = [
 
 # Compatibilidade com código que ainda importa o nome antigo.
 PROTECTED_SUBDIRS = PROTECTED_PATHS
+
+
+# Saídas grandes devoram a janela de contexto (8192 tokens); o modelo deve pedir
+# trechos com start_line/end_line.
+MAX_READ_CHARS = 8000
+MAX_LIST_ITEMS = 200
+
+
+def _python_syntax_error(path: Path, content: str) -> str | None:
+    """Mensagem curta se o conteúdo de um .py não for Python válido; senão None."""
+
+    if path.suffix.lower() != ".py":
+        return None
+
+    try:
+        ast.parse(content)
+    except SyntaxError as error:
+        return f"Sintaxe Python inválida na linha {error.lineno}: {error.msg}. O arquivo NÃO foi alterado."
+
+    return None
 
 
 def _is_within(target: Path, base: Path) -> bool:
@@ -94,11 +115,18 @@ def list_directory(path: str) -> dict:
             "type": "directory" if item.is_dir() else "file",
         })
 
-    return {
+    result = {
         "success": True,
         "path": str(target),
-        "items": items,
+        "items": items[:MAX_LIST_ITEMS],
     }
+
+    if len(items) > MAX_LIST_ITEMS:
+        result["truncated"] = True
+        result["total_items"] = len(items)
+        result["notice"] = f"Mostrando {MAX_LIST_ITEMS} de {len(items)} itens. Liste uma subpasta."
+
+    return result
 
 
 def read_file(
@@ -137,22 +165,43 @@ def read_file(
 
             selected = lines[start - 1 : end]
             formatted = [f"{i}: {line}" for i, line in enumerate(selected, start=start)]
+            text = "\n".join(formatted)
 
-            return {
+            result = {
                 "success": True,
                 "path": str(target),
                 "total_lines": total_lines,
                 "start_line": start,
                 "end_line": end,
-                "content": "\n".join(formatted),
+                "content": text,
             }
 
-        return {
+            if len(text) > MAX_READ_CHARS:
+                result["content"] = text[:MAX_READ_CHARS]
+                result["truncated"] = True
+                result["notice"] = (
+                    f"Trecho truncado em {MAX_READ_CHARS} caracteres. "
+                    "Peça um intervalo menor de linhas."
+                )
+
+            return result
+
+        result = {
             "success": True,
             "path": str(target),
             "total_lines": total_lines,
             "content": content,
         }
+
+        if len(content) > MAX_READ_CHARS:
+            result["content"] = content[:MAX_READ_CHARS]
+            result["truncated"] = True
+            result["notice"] = (
+                f"Arquivo grande ({total_lines} linhas, {len(content)} caracteres): mostrando só o início. "
+                "Use start_line e end_line para ler o trecho que precisa."
+            )
+
+        return result
 
     except UnicodeDecodeError:
         return {
@@ -175,6 +224,14 @@ def write_file(path: str, content: str) -> dict:
         return {
             "success": False,
             "error": error_msg,
+        }
+
+    syntax_error = _python_syntax_error(target, content)
+    if syntax_error:
+        return {
+            "success": False,
+            "error": syntax_error,
+            "syntax_error": True,
         }
 
     try:
@@ -246,6 +303,15 @@ def replace_in_file(path: str, target: str, replacement: str) -> dict:
             }
 
         new_content = content.replace(target, replacement, 1)
+
+        syntax_error = _python_syntax_error(target_file, new_content)
+        if syntax_error:
+            return {
+                "success": False,
+                "error": syntax_error,
+                "syntax_error": True,
+            }
+
         target_file.write_text(new_content, encoding="utf-8")
 
         return {

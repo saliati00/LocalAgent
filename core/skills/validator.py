@@ -38,6 +38,13 @@ FORBIDDEN_PATTERNS = (
     (r"invoke-expression|\biex\b", False),
 )
 
+# Caracteres invisíveis usados para esconder instruções (zero-width, bidi, tags Unicode).
+INVISIBLE_CHARS = re.compile(
+    "[\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff\U000e0000-\U000e007f]"
+)
+BASE64_BLOB = re.compile(r"[A-Za-z0-9+/]{40,}={0,2}")
+URL_PATTERN = re.compile(r"https?://", re.IGNORECASE)
+
 NEGATIONS = re.compile(r"\b(n[aã]o|nunca|jamais|nem|never|don't|do not)\b")
 
 
@@ -101,6 +108,16 @@ def validate_skill_text(name: str, text: str, known_tools: set[str] | None = Non
     for section in REQUIRED_SECTIONS:
         if section not in body:
             errors.append(f"Seção obrigatória ausente: '{section}'.")
+
+    # O BOM inicial é tolerado; qualquer outro caractere invisível não.
+    if INVISIBLE_CHARS.search(text.lstrip("\ufeff")):
+        errors.append("Caracteres invisíveis (Unicode oculto) não são permitidos em Skills.")
+
+    if BASE64_BLOB.search(text):
+        errors.append("Trecho que parece base64/codificado (40+ caracteres seguidos) não é permitido.")
+
+    if URL_PATTERN.search(text):
+        errors.append("URLs não são permitidas em rascunhos de Skills; o usuário pode adicioná-las após revisar.")
 
     lowered = text.lower()
     for pattern, negatable in FORBIDDEN_PATTERNS:

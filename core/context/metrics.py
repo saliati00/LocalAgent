@@ -6,6 +6,31 @@ import json
 CHARS_PER_TOKEN = 3.0
 
 
+NEAR_LIMIT_RATIO = 0.95
+
+
+def context_pressure(prompt_tokens: int, num_ctx: int) -> str:
+    """
+    Classifica o uso da janela pelo prompt_eval_count devolvido pelo modelo.
+
+    'truncated': o prompt chegou ao limite (o Ollama descarta o início da conversa,
+                 inclusive o objetivo, sem avisar).
+    'near_limit': acima de 95% da janela.
+    'ok': abaixo disso.
+    """
+
+    if num_ctx <= 0:
+        return "ok"
+
+    if prompt_tokens >= num_ctx - 8:
+        return "truncated"
+
+    if prompt_tokens >= num_ctx * NEAR_LIMIT_RATIO:
+        return "near_limit"
+
+    return "ok"
+
+
 def estimate_tokens(text: str) -> int:
     return int(len(text or "") / CHARS_PER_TOKEN)
 

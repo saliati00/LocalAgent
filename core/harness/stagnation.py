@@ -23,9 +23,16 @@ DEFAULT_MAX_STAGNATION_CYCLES = 6
 # alteração intermediária de estado comprova ciclo vicioso de consultas.
 DEFAULT_MAX_REPEATED_QUERIES = 3
 
+# Limiares inspirados no StuckDetector do OpenHands:
+# a mesma ação falhando 3 vezes seguidas, ou duas ações alternando por 6 ciclos.
+STUCK_SAME_ERROR_REPEATS = 3
+STUCK_ALTERNATING_CYCLES = 6
+
 READ_ONLY_TOOLS = {
     "list_directory",
     "read_file",
+    "check_tools",
+    "load_skill",
     "get_project_status",
     "get_memory",
     "get_model_registry",
@@ -91,6 +98,53 @@ class StagnationDetector:
         self.last_action: str = ""
         self.consecutive_tool_failures: int = 0
         self.last_state_snapshot: dict | None = None
+        self.signatures: list[tuple[str, bool]] = []
+        self.stuck_reason: str | None = None
+
+    @staticmethod
+    def _signature(name: str, arguments: dict | None) -> str:
+        """Identidade da ação ignorando campos que só justificam (reason etc.)."""
+
+        cleaned = {
+            key: value
+            for key, value in (arguments or {}).items()
+            if key not in {"reason", "justification", "description"}
+        }
+
+        return name + "|" + repr(sorted(cleaned.items(), key=lambda item: item[0]))
+
+    def detect_stuck(self) -> str | None:
+        """
+        Padrões de travamento que não dependem de 'sem progresso':
+        - a mesma ação falhando STUCK_SAME_ERROR_REPEATS vezes seguidas;
+        - duas ações diferentes alternando por STUCK_ALTERNATING_CYCLES ciclos.
+        """
+
+        recent = self.signatures
+
+        if len(recent) >= STUCK_SAME_ERROR_REPEATS:
+            tail = recent[-STUCK_SAME_ERROR_REPEATS:]
+
+            if len({sig for sig, _ in tail}) == 1 and all(not ok for _, ok in tail):
+                return (
+                    f"A mesma ação falhou {STUCK_SAME_ERROR_REPEATS} vezes seguidas "
+                    f"({tail[0][0].split('|')[0]})."
+                )
+
+        if len(recent) >= STUCK_ALTERNATING_CYCLES:
+            tail = [sig for sig, _ in recent[-STUCK_ALTERNATING_CYCLES:]]
+            first, second = tail[0], tail[1]
+
+            if first != second and all(
+                sig == (first if index % 2 == 0 else second)
+                for index, sig in enumerate(tail)
+            ):
+                return (
+                    f"Duas ações alternando por {STUCK_ALTERNATING_CYCLES} ciclos "
+                    f"({first.split('|')[0]} <-> {second.split('|')[0]})."
+                )
+
+        return None
 
     def is_progress_action(
         self,
@@ -152,6 +206,10 @@ class StagnationDetector:
         if name in {"set_smart_candidate_for_benchmark", "set_active_smart_model"}:
             return True
 
+        # Rascunho de Skill gravado
+        if name == "propose_skill":
+            return True
+
         # Modificação real de arquivos no sistema
         if name in {"write_file", "replace_in_file", "download_file"}:
             return True
@@ -185,6 +243,15 @@ class StagnationDetector:
         self.last_action = action_desc
 
         success = bool(result.get("success", False))
+
+        self.signatures.append((self._signature(name, arguments), success))
+        self.signatures = self.signatures[-STUCK_ALTERNATING_CYCLES:]
+
+        stuck = self.detect_stuck()
+        if stuck:
+            # Equivale a esgotar o limiar de estagnação: dispara a escalada existente.
+            self.stuck_reason = stuck
+            self.stagnation_cycles = max(self.stagnation_cycles, self.max_stagnation_cycles)
 
         # Diferenciação clara: falha de execução de ferramenta vs estagnação
         if not success:
@@ -237,6 +304,8 @@ class StagnationDetector:
         self.stagnation_cycles = 0
         self.repeated_tools.clear()
         self.consecutive_tool_failures = 0
+        self.signatures.clear()
+        self.stuck_reason = None
 
     def is_stagnated(self) -> bool:
         """
@@ -261,6 +330,10 @@ class StagnationDetector:
                 f"{self.stagnation_cycles} ciclos consecutivos de ferramentas executadas com sucesso "
                 "sem produzir nenhuma transição de estado, decisão ou progresso verificável."
             )
+
+            if self.stuck_reason:
+                reason = f"Travamento do modelo FAST ('{fast_model or 'fast'}'): {self.stuck_reason}"
+
             event = self.create_escalation_event(
                 phase=phase,
                 task=task,
