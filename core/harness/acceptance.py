@@ -43,6 +43,15 @@ def check_checklist_acceptance(
 
     item_lower = (item or "").strip().lower()
 
+    # Itens que dependem do usuário (medição no PC dele ou arquivos protegidos)
+    # nunca são concluídos pelo agente.
+    if item_lower.startswith("[humano]"):
+        return (
+            False,
+            "Este item depende do usuário (medição no PC dele ou alteração de arquivos protegidos). "
+            "Explique a ele o que precisa ser feito; quem marca o item como concluído é o usuário.",
+        )
+
     # =========================================================
     # REGRA: ESCOLHER MODELO SMART CANDIDATO
     # =========================================================

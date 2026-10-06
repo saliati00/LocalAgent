@@ -22,8 +22,12 @@ def describe_prompt_sections(sections: dict[str, str], context_window: int | Non
         for name, text in sections.items()
     }
 
-    total_chars = sum(item["chars"] for item in report.values())
-    total_tokens = sum(item["est_tokens"] for item in report.values())
+    # Seções "detail:..." detalham outra seção (ex.: skills dentro do system prompt)
+    # e não podem ser somadas de novo no total.
+    counted = {name: item for name, item in report.items() if not name.startswith("detail:")}
+
+    total_chars = sum(item["chars"] for item in counted.values())
+    total_tokens = sum(item["est_tokens"] for item in counted.values())
 
     report["_total"] = {"chars": total_chars, "est_tokens": total_tokens}
 

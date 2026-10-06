@@ -40,3 +40,25 @@ def test_prompt_sections_report_sizes_and_total():
     assert report["_total"]["chars"] == 390
     assert report["_total"]["est_tokens"] == estimate_tokens("a" * 300) + estimate_tokens("b" * 90)
     assert 0 < report["_total"]["fraction_of_window"] < 1
+
+
+def test_detail_sections_are_reported_but_not_double_counted():
+    report = json.loads(describe_prompt_sections({
+        "system_instructions": "a" * 300,
+        "tools_schema": "b" * 90,
+        "detail:skills": "c" * 120,
+    }))
+
+    assert report["detail:skills"]["chars"] == 120
+    assert report["_total"]["chars"] == 390
+
+
+def test_fast_model_does_not_receive_propose_skill_schema():
+    import agent
+
+    fast = {t["function"]["name"] for t in agent.visible_tools(False)}
+    smart = {t["function"]["name"] for t in agent.visible_tools(True)}
+
+    assert "propose_skill" not in fast
+    assert "propose_skill" in smart
+    assert smart - fast == {"propose_skill"}

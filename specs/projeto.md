@@ -1143,6 +1143,8 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 ## FASE 11 — ESTABILIZAÇÃO (contexto, avaliação e autoexpansão segura)
 
 > Posicionada antes da FASE 2 de propósito (o Harness escolhe a próxima pendência pela ordem do arquivo). Cada item declara "pronto quando".
+>
+> Itens marcados **[humano]** exigem uma medição no seu PC ou alteração de arquivos protegidos (`core/`, `tools/`, `agent.py`). O agente não pode marcá-los como concluídos: o Harness recusa. Ele deve apenas dizer o que você precisa fazer; quem marca `[x]` é você, editando este arquivo.
 
 * [x] Log com run_id e tamanho das seções do prompt (pronto quando: pytest tests/test_logging_and_metrics.py passa)
 * [x] Contrato entre schema de tools e dispatch (pronto quando: pytest tests/test_tool_contract.py passa)
@@ -1152,11 +1154,11 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [x] Orçamento de Skills no prompt e carregamento sob demanda (pronto quando: pytest tests/test_skill_expansion.py passa)
 * [x] Autoexpansão segura de Skills com rascunho, validação e promoção humana (pronto quando: pytest tests/test_skill_expansion.py passa)
 * [x] Instalador Windows de um clique e manual (pronto quando: powershell -File scripts/setup_windows.ps1 -DryRun termina sem erro)
-* [ ] Medir no PC alvo o consumo real do prompt e mantê-lo abaixo de 60% da janela (pronto quando: PROMPT_SIZES de 10 tarefas reais mostram est_tokens total menor que 0,6 de NUM_CTX)
 * [ ] Criar o conjunto de avaliação com 10 a 20 tarefas reais e critério de aceite executável (pronto quando: um script de avaliação roda todas as tarefas e imprime a taxa de sucesso)
-* [ ] Comparar FAST sozinho, FAST com think, SMART sozinho e cascata com o conjunto de avaliação (pronto quando: a tabela de resultados está registrada em specs/avaliacoes.md)
-* [ ] Substituir o juiz de conclusão por LLM por critério de aceite executável nas tarefas de desenvolvimento (pronto quando: a tarefa só conclui se o comando de aceite retornar 0)
-* [ ] Limitar e revisar a memória persistente (pronto quando: save_memory recusa valores acima do limite e entradas de decisão exigem revisão)
+* [ ] [humano] Medir no PC alvo o consumo real do prompt e mantê-lo abaixo de 60% da janela (pronto quando: PROMPT_SIZES de 10 tarefas reais mostram est_tokens total menor que 0,6 de NUM_CTX)
+* [ ] [humano] Comparar FAST sozinho, FAST com think, SMART sozinho e cascata com o conjunto de avaliação (pronto quando: a tabela de resultados está registrada em specs/avaliacoes.md)
+* [ ] [humano] Substituir o juiz de conclusão por LLM por critério de aceite executável nas tarefas de desenvolvimento (pronto quando: a tarefa só conclui se o comando de aceite retornar 0)
+* [ ] [humano] Limitar e revisar a memória persistente (pronto quando: save_memory recusa valores acima do limite e entradas de decisão exigem revisão)
 
 ---
 
@@ -1523,7 +1525,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-255 testes aprovados (pytest, pasta tests/)
+261 testes aprovados (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.

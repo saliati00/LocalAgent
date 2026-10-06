@@ -537,6 +537,19 @@ def check_task_constraint(
     return check_constraints(parts, constraints)
 
 
+def visible_tools(on_smart: bool) -> list:
+    """
+    Schema de tools enviado ao modelo. O schema entra em toda chamada e consome
+    contexto; propose_skill só é útil (e permitida) para o SMART, então o FAST
+    não a recebe.
+    """
+
+    if on_smart or not ONLY_SMART_CAN_PROPOSE_SKILLS:
+        return TOOLS
+
+    return [t for t in TOOLS if t["function"]["name"] != "propose_skill"]
+
+
 def task_used_web(state) -> bool:
     """True se alguma ferramenta de web/download foi chamada nesta tarefa."""
 
@@ -764,12 +777,13 @@ REGRAS FUNDAMENTAIS DE EXECUÇÃO
         "PROMPT_SIZES",
         describe_prompt_sections(
             {
-                "constraints": constraints_context,
-                "project_summary": project_summary,
-                "memory": memory_context,
-                "skills": skill_context,
-                "system_total": system_instructions,
+                "system_instructions": system_instructions,
                 "user_prompt": user_prompt_text,
+                "tools_schema": json.dumps(visible_tools(False), ensure_ascii=False),
+                "detail:constraints": constraints_context,
+                "detail:project_summary": project_summary,
+                "detail:memory": memory_context,
+                "detail:skills": skill_context,
             },
             context_window=NUM_CTX,
         ),
@@ -959,7 +973,7 @@ REGRAS FUNDAMENTAIS DE EXECUÇÃO
             response = client.chat(
                 model=active_model,
                 messages=prepared_messages,
-                tools=TOOLS,
+                tools=visible_tools(on_smart),
                 think=False,
                 options={"num_ctx": NUM_CTX},
             )
