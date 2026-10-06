@@ -1,12 +1,16 @@
-import re
 import html
+import os
+import re
 from pathlib import Path
 import httpx
 
 from tools.filesystem import is_path_writable, PROJECT_ROOT
 
 
-USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0"
+
+# Limite de segurança por download (evita encher o disco por engano).
+MAX_DOWNLOAD_BYTES = 2 * 1024 ** 3
 
 
 def clean_html(raw_html: str) -> str:
@@ -161,8 +165,12 @@ def download_file(url: str, destination: str) -> dict:
             "error": error_msg,
         }
 
+    part_path = dest_path.with_name(dest_path.name + ".part")
+
     try:
         dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+        bytes_written = 0
 
         with httpx.stream(
             "GET",
@@ -177,11 +185,19 @@ def download_file(url: str, destination: str) -> dict:
                     "error": f"Servidor retornou status {response.status_code}",
                 }
 
-            bytes_written = 0
-            with open(dest_path, "wb") as f:
+            with open(part_path, "wb") as f:
                 for chunk in response.iter_bytes(chunk_size=16384):
-                    f.write(chunk)
                     bytes_written += len(chunk)
+
+                    if bytes_written > MAX_DOWNLOAD_BYTES:
+                        raise ValueError(
+                            f"Download excedeu o limite de {MAX_DOWNLOAD_BYTES} bytes."
+                        )
+
+                    f.write(chunk)
+
+        # Só aparece no destino final quando o download terminou inteiro.
+        os.replace(part_path, dest_path)
 
         return {
             "success": True,
@@ -191,6 +207,8 @@ def download_file(url: str, destination: str) -> dict:
         }
 
     except Exception as e:
+        part_path.unlink(missing_ok=True)
+
         return {
             "success": False,
             "error": f"Erro ao baixar arquivo: {e}",
