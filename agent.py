@@ -1302,8 +1302,7 @@ Orientações:
 
 if __name__ == "__main__":
     while True:
-        prompt = input("
-Tarefa (ENTER vazio para sair): ").strip()
+        prompt = input("\nTarefa (ENTER vazio para sair): ").strip()
 
         if not prompt:
             break
