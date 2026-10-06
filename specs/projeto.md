@@ -1154,7 +1154,10 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [x] Orçamento de Skills no prompt e carregamento sob demanda (pronto quando: pytest tests/test_skill_expansion.py passa)
 * [x] Autoexpansão segura de Skills com rascunho, validação e promoção humana (pronto quando: pytest tests/test_skill_expansion.py passa)
 * [x] Instalador Windows de um clique e manual (pronto quando: powershell -File scripts/setup_windows.ps1 -DryRun termina sem erro)
-* [ ] Criar o conjunto de avaliação com 10 a 20 tarefas reais e critério de aceite executável (pronto quando: um script de avaliação roda todas as tarefas e imprime a taxa de sucesso)
+* [x] Tarefas numeradas retomáveis, com roteiro, progresso salvo e teste de aceite (pronto quando: pytest tests/test_numbered_tasks.py passa)
+* [x] Saída de console segura no Windows, sem erro de codificação (pronto quando: pytest tests/test_console_encoding.py passa)
+* [x] Prompt compacto: tarefa numerada abaixo de 60% da janela e aviso PROMPT_TOO_BIG (pronto quando: PROMPT_SIZES de uma tarefa numerada mostra menos de 0,6 de NUM_CTX)
+* [ ] Criar o conjunto de avaliação com 10 a 20 tarefas reais e critério de aceite executável (tarefas 02 e 03 em tarefas/; pronto quando: pytest -m aceite tests/test_aceite_tarefa02.py tests/test_aceite_tarefa03.py passa e o runner imprime a taxa de sucesso)
 * [ ] [humano] Medir no PC alvo o consumo real do prompt e mantê-lo abaixo de 60% da janela (pronto quando: PROMPT_SIZES de 10 tarefas reais mostram est_tokens total menor que 0,6 de NUM_CTX)
 * [ ] [humano] Comparar FAST sozinho, FAST com think, SMART sozinho e cascata com o conjunto de avaliação (pronto quando: a tabela de resultados está registrada em specs/avaliacoes.md)
 * [ ] [humano] Substituir o juiz de conclusão por LLM por critério de aceite executável nas tarefas de desenvolvimento (pronto quando: a tarefa só conclui se o comando de aceite retornar 0)
@@ -1525,7 +1528,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-285 testes aprovados (pytest, pasta tests/)
+331 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1646,7 +1649,7 @@ O FAST opera e conversa; o SMART é um consultor curto, não um segundo operador
 * Estados terminais distintos: `completed`, `cancelled` (o usuário recusou), `needs_human` (depende de uma ação do usuário), `blocked`, `failed` e `smart_unavailable`.
 * Três respostas de texto praticamente iguais seguidas (similaridade de 0,9 ou mais) terminam em `needs_human`.
 * Ferramentas de leitura (`get_model_registry`, `get_project_status`, `get_memory`, `read_file`, `list_directory`, `check_tools`, `load_skill`) são memoizadas por tarefa e o cache é invalidado por qualquer ferramenta que altere estado. A ferramenta `check_tools` verifica N executáveis numa só chamada.
-* O prompt tem orçamento: as Skills ocupam até `SKILLS_BUDGET_CHARS` (7000 caracteres); o excedente entra como índice e o modelo lê o resto com `load_skill`.
+* O prompt tem orçamento: as Skills ocupam até `SKILLS_BUDGET_CHARS` (3500 caracteres); o excedente entra como índice e o modelo lê o resto com `load_skill`.
 * Cada linha de log carrega o `run_id`, e cada tarefa registra `PROMPT_SIZES` (tamanho por seção do prompt).
 
 Pendências desta arquitetura (FASE 11):
@@ -1739,3 +1742,16 @@ Já implementado a partir desta pesquisa:
 * Validador de Skills recusa Unicode invisível, trechos base64 e URLs em rascunhos.
 
 Ainda não implementado: reduzir tools por turno, substituir o juiz de conclusão, conjunto de avaliação, escrita compacta de prompts.
+
+
+---
+
+# 46. TAREFAS NUMERADAS, CONSOLE E ORÇAMENTO DE PROMPT
+
+Achados de uma simulação de clone limpo (06/10/2026), já corrigidos:
+
+* **Tarefas numeradas:** `tarefas/tarefa-NN-*.md` define objetivo, passos, o que pode mexer, "pronto quando" e onde salvar o progresso. O usuário diz "dê continuidade à tarefa 2" (ou `@tarefa2`); o Harness carrega o roteiro, o pedido e o progresso salvo em `workspace/tarefa-NN/progresso.md`. A pasta `tarefas/` e os testes de aceite são protegidos: só o usuário os altera. Os testes de aceite usam o marcador `aceite` (fora da suíte normal; rodar com `pytest -m aceite <arquivo>`), e quem decide se a tarefa terminou é o teste, não o modelo. Uma tarefa numerada não aciona o fluxo de desenvolvimento do checklist.
+* **Console do Windows:** um `print` com "→", "✓" ou emoji derrubava o agente em console cp1252/cp850 (inclusive a tela de confirmação). Corrigido com `core/console.py` (`safe_print`, `ensure_utf8_console`) e `chcp 65001` + `PYTHONUTF8=1` nos `.bat`.
+* **Prompt fixo acima da janela:** uma tarefa numerada estimava 8363 tokens para 8192 (102%) antes de qualquer conversa. Medidas: system prompt compacto para tarefas numeradas (resumo do checklist fora e Skills só como índice), memória persistente limitada a 1500 caracteres (entradas mais recentes primeiro), orçamento de Skills de 3500 caracteres, descrições do schema de tools abreviadas, regras mais curtas. Resultado estimado: tarefa numerada 53%, tarefa simples ~60% e desenvolvimento ~70% da janela (estimativa de 3 caracteres por token; confirmar com `PROMPT_SIZES`). O Harness registra `PROMPT_TOO_BIG` quando o prompt fixo passa de 70%.
+* **Proteções adicionais:** os scripts que o usuário executa (`scripts/promote_skill.py`, instalador e `.bat`) e os `requirements*.txt` ficaram fora do alcance das tools do agente.
+* **Resumo de logs:** `scripts/summarize_logs.py` consolida `PROMPT_SIZES`, tokens, avisos de contexto, escaladas e `needs_human`.

@@ -48,8 +48,12 @@ Se aparecer algo como *"Modelo qwen3:8b respondeu: conexão local funcionando"*,
    - `Liste os arquivos da pasta workspace e me diga o que são.`
    - `Verifique se o git e o python estão instalados.`
    - `Crie um arquivo workspace/ola.txt com o texto "oi".`
-3. Para começar o desenvolvimento do projeto, digite apenas **`@iniciar-desenvolvimento`** e aperte ENTER. Isso carrega o prompt salvo na pasta `prompts` (você pode abrir esse arquivo e ajustar o texto).
-4. Para sair, aperte ENTER sem escrever nada.
+3. **Tarefas numeradas (o jeito mais simples de dar continuidade):** digite `dê continuidade à tarefa 1` (ou `@tarefa1`, `@tarefa2`...). O agente carrega o roteiro da tarefa e **retoma de onde parou**. Comece pela tarefa 1. A lista e como saber se cada uma terminou estão em `tarefas\LEIA-ME.md`.
+4. Para o desenvolvimento geral do projeto, digite **`@iniciar-desenvolvimento`**. Isso carrega o prompt salvo na pasta `prompts` (você pode abrir o arquivo e ajustar o texto).
+5. Para sair, aperte ENTER sem escrever nada.
+
+### Depois de usar: resumo dos números
+Dê duplo clique em `verificar.bat` ou rode `.venv\Scripts\python scripts\summarize_logs.py`. Ele mostra o tamanho do prompt, tokens, avisos de contexto cheio e quantas vezes o agente pediu ajuda. Guarde essa saída para me mostrar.
 
 ---
 
