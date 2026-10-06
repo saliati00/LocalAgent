@@ -2,6 +2,7 @@ import os
 import shlex
 from pathlib import Path
 
+from core.console import safe_print
 from core.paths import PROJECT_ROOT
 
 
@@ -422,29 +423,29 @@ def requires_confirmation(command: str) -> bool:
 
 
 def request_confirmation(command: str, reason: str) -> bool:
-    print()
-    print("=" * 60)
-    print("⚠️  AÇÃO REQUER CONFIRMAÇÃO")
-    print("=" * 60)
-    print()
+    safe_print()
+    safe_print("=" * 60)
+    safe_print("⚠️  AÇÃO REQUER CONFIRMAÇÃO")
+    safe_print("=" * 60)
+    safe_print()
 
-    print("O que será feito:")
-    print(reason)
+    safe_print("O que será feito:")
+    safe_print(reason)
 
-    print()
-    print("Comando exato:")
-    print(f"  {command}")
+    safe_print()
+    safe_print("Comando exato:")
+    safe_print(f"  {command}")
 
-    print()
-    print("Pressione ENTER para executar.")
-    print("Digite C e pressione ENTER para cancelar.")
-    print()
+    safe_print()
+    safe_print("Pressione ENTER para executar.")
+    safe_print("Digite C e pressione ENTER para cancelar.")
+    safe_print()
 
     try:
         answer = input("> ").strip().lower()
         return answer == ""
     except (EOFError, OSError):
-        print("❌ Entrada não interativa ou fechada. Operação cancelada.")
+        safe_print("❌ Entrada não interativa ou fechada. Operação cancelada.")
         return False
 
 
@@ -452,10 +453,10 @@ def authorize(command: str, reason: str) -> bool:
     parts, error = parse_command(command)
 
     if error:
-        print()
-        print("❌ Comando recusado pelo Permission Manager.")
-        print(error)
-        print()
+        safe_print()
+        safe_print("❌ Comando recusado pelo Permission Manager.")
+        safe_print(error)
+        safe_print()
 
         return False
 

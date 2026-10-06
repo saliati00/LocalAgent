@@ -6,10 +6,16 @@ from pathlib import Path
 
 import ollama
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from core.console import ensure_utf8_console  # noqa: E402
+
 REGISTRY = Path(__file__).resolve().parent.parent / "models" / "registry.json"
 
 
 def main() -> int:
+    ensure_utf8_console()
+
     model = "qwen3:8b"
 
     try:

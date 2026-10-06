@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 
+from core.console import safe_print
 from core.paths import LOGS_DIR
 
 
@@ -37,4 +38,4 @@ def log(event: str, details: str = ""):
     with LOG_FILE.open("a", encoding="utf-8") as file:
         file.write(line + "\n")
 
-    print(line)
+    safe_print(line)

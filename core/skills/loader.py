@@ -4,9 +4,9 @@ from pathlib import Path
 from core.paths import SKILLS_DIR
 from core.skills.frontmatter import parse_frontmatter
 
-# Orçamento de caracteres de Skills no prompt do sistema (~2,3k tokens).
+# Orçamento de caracteres de Skills no prompt do sistema (~1,2k tokens).
 # O que passar disso entra só como índice; o modelo lê o resto com load_skill.
-SKILLS_BUDGET_CHARS = 7000
+SKILLS_BUDGET_CHARS = 3500
 
 SKILL_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,60}$")
 

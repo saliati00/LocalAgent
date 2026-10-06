@@ -125,11 +125,49 @@ class MemoryStore:
             return True
         return False
 
-    def format_context(self, categories: list[str] | None = None) -> str:
+    @staticmethod
+    def _format_entry(key: str, item: dict) -> str:
+        value = item.get("value")
+        desc = item.get("description")
+
+        if desc:
+            return f"- {key}: {value} ({desc})"
+
+        return f"- {key}: {value}"
+
+    def format_context(
+        self,
+        categories: list[str] | None = None,
+        max_chars: int | None = None,
+    ) -> str:
         """
         Formata memórias persistentes em um resumo conciso para injeção no prompt do sistema.
         """
         cats_to_include = categories or ["environment", "decisions", "progress"]
+
+        # Com teto, entram primeiro as entradas mais recentes; as antigas (que podem
+        # estar defasadas) são descartadas até caber.
+        allowed = None
+
+        if max_chars is not None:
+            candidates = []
+
+            for cat in cats_to_include:
+                for k, item in self._data.get(cat, {}).items():
+                    candidates.append((item.get("updated_at") or "", cat, k, self._format_entry(k, item)))
+
+            candidates.sort(key=lambda row: row[0], reverse=True)
+
+            allowed = set()
+            used = 0
+
+            for _, cat, k, line in candidates:
+                if used + len(line) + 1 > max_chars:
+                    continue
+
+                allowed.add((cat, k))
+                used += len(line) + 1
+
         sections = []
 
         for cat in cats_to_include:
@@ -139,14 +177,13 @@ class MemoryStore:
 
             lines = [f"[{cat.upper()}]:"]
             for k, item in entries.items():
-                val = item.get("value")
-                desc = item.get("description")
-                if desc:
-                    lines.append(f"- {k}: {val} ({desc})")
-                else:
-                    lines.append(f"- {k}: {val}")
+                if allowed is not None and (cat, k) not in allowed:
+                    continue
 
-            sections.append("\n".join(lines))
+                lines.append(self._format_entry(k, item))
+
+            if len(lines) > 1:
+                sections.append("\n".join(lines))
 
         if not sections:
             return ""

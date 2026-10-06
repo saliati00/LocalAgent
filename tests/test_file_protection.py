@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 
@@ -66,7 +67,9 @@ def test_temp_dir_is_writable():
 
 
 def test_outside_project_is_denied():
-    outside = PROJECT_ROOT.parent / "fora.txt"
+    # Raiz da unidade: fora do projeto e fora da pasta temporária, onde quer que o
+    # repositório esteja (um clone dentro de %TEMP% não pode mudar o resultado).
+    outside = Path(PROJECT_ROOT.anchor) / "fora-do-projeto-localagent.txt"
     writable, _ = is_path_writable(outside)
     assert writable is False
 

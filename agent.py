@@ -11,7 +11,8 @@ from core.harness.completion import (
     check_completion,
     build_continuation_reason,
 )
-from core.context.metrics import context_pressure, describe_prompt_sections
+from core.console import ensure_utf8_console
+from core.context.metrics import context_pressure, describe_prompt_sections, estimate_tokens
 from core.harness.handover import build_handover_packet
 from core.harness.logger import log, new_run_id
 from core.harness.memo import ToolMemo
@@ -29,6 +30,7 @@ from core.memory.store import MemoryStore
 from core.router.model_router import ModelRouter
 from core.skills.loader import (
     SKILLS_BUDGET_CHARS,
+    list_skills,
     format_skills_context,
     load_skill,
     match_skills,
@@ -45,6 +47,24 @@ client = ollama.Client(
 NUM_CTX = 8192
 MAX_ITERATIONS = 30
 MAX_ESCALATIONS = 3
+
+# Descrições do schema de tools enviadas ao modelo (o schema completo continua em TOOLS).
+COMPACT_TOOL_SCHEMA = True
+TOOL_DESCRIPTION_MAX_CHARS = 110
+PARAM_DESCRIPTION_MAX_CHARS = 80
+# Parâmetros com valores restritos (role, category) ou regras (name do propose_skill)
+# mantêm a descrição curta.
+SELF_EXPLANATORY_PARAMS = {
+    "path", "content", "query", "url", "names", "key", "value",
+    "command", "item", "destination", "model_name", "reason",
+    "target", "replacement",
+}
+
+# Memória persistente no prompt: no máximo isto (entradas mais recentes primeiro).
+MEMORY_PROMPT_MAX_CHARS = 1500
+
+# Acima desta fração da janela, o prompt fixo (sistema + tools + pedido) é perigoso.
+PROMPT_BUDGET_WARN_RATIO = 0.7
 SMART_MAX_ITERATIONS = 8
 
 # Só o modelo SMART pode propor Skills novas (rascunhos que um humano promove).
@@ -538,6 +558,53 @@ def check_task_constraint(
     return check_constraints(parts, constraints)
 
 
+def _first_sentence(text: str, limit: int) -> str:
+    text = " ".join((text or "").split())
+    sentence = text.split(". ")[0]
+
+    if len(sentence) > limit:
+        sentence = sentence[: limit - 3].rstrip() + "..."
+
+    return sentence
+
+
+def compact_tools(tools: list) -> list:
+    """
+    Cópia do schema com descrições curtas (primeira frase, com limite). Nomes,
+    parâmetros, tipos e campos obrigatórios ficam idênticos.
+
+    O schema entra em toda chamada e é o maior bloco fixo do prompt.
+    """
+
+    compacted = []
+
+    for tool in tools:
+        function = dict(tool["function"])
+        function["description"] = _first_sentence(function.get("description", ""), TOOL_DESCRIPTION_MAX_CHARS)
+
+        parameters = dict(function.get("parameters", {}))
+        properties = {}
+
+        for name, spec in parameters.get("properties", {}).items():
+            spec = dict(spec)
+
+            if name in SELF_EXPLANATORY_PARAMS:
+                # O nome já diz tudo (path, query, url...): a descrição só gasta tokens.
+                spec.pop("description", None)
+            elif "description" in spec:
+                spec["description"] = _first_sentence(spec["description"], PARAM_DESCRIPTION_MAX_CHARS)
+
+            properties[name] = spec
+
+        if properties:
+            parameters["properties"] = properties
+
+        function["parameters"] = parameters
+        compacted.append({"type": tool.get("type", "function"), "function": function})
+
+    return compacted
+
+
 def visible_tools(on_smart: bool) -> list:
     """
     Schema de tools enviado ao modelo. O schema entra em toda chamada e consome
@@ -545,10 +612,15 @@ def visible_tools(on_smart: bool) -> list:
     não a recebe.
     """
 
-    if on_smart or not ONLY_SMART_CAN_PROPOSE_SKILLS:
-        return TOOLS
+    tools = COMPACT_TOOLS if COMPACT_TOOL_SCHEMA else TOOLS
 
-    return [t for t in TOOLS if t["function"]["name"] != "propose_skill"]
+    if on_smart or not ONLY_SMART_CAN_PROPOSE_SKILLS:
+        return tools
+
+    return [t for t in tools if t["function"]["name"] != "propose_skill"]
+
+
+COMPACT_TOOLS = compact_tools(TOOLS)
 
 
 def task_used_web(state) -> bool:
@@ -611,7 +683,7 @@ def agent(prompt: str):
             next_action=progress["next_action"],
         )
 
-    log("TASK", f"Objetivo: {prompt}")
+    log("TASK", "Objetivo: " + " ".join(prompt.split())[:160])
 
     if progress["success"]:
         log(
@@ -667,28 +739,30 @@ Instruções para cumprir esta etapa:
     # RESUMO ESTRUTURADO DO PROJETO
     # =========================================================
 
+    is_numbered_task = prompt.lstrip().startswith(TASK_MARKER)
+
     memory_store = MemoryStore()
-    memory_context = memory_store.format_context()
+    memory_context = memory_store.format_context(max_chars=MEMORY_PROMPT_MAX_CHARS)
 
     project_summary = format_project_summary(progress)
-    project_context = f"""
-=========================================================
-ESTADO ESTRUTURADO DO PROJETO (FORNECIDO PELO HARNESS)
-=========================================================
+
+    if is_numbered_task:
+        # A tarefa numerada já traz os passos; o resumo do checklist só gasta contexto.
+        project_summary = ""
+        project_context = memory_context
+    else:
+        project_context = f"""
+ESTADO DO PROJETO (HARNESS)
 {project_summary}
 
 {memory_context}
 
-Orientações para desenvolvimento do projeto:
-- Use 'replace_in_file' para editar código existente de forma precisa.
-- Use 'write_file' para criar novos arquivos.
-- Valide SEMPRE suas modificações com 'run_command' executando 'pytest -v'.
-- Use 'update_spec_checklist' para marcar uma pendência como concluída [x] apenas após executá-la ou validá-la.
-- Use 'get_model_registry' para consultar modelos cadastrados e 'register_model_candidate' para oficializar novos candidatos.
-- Para etapas decisórias de seleção de modelo: o Harness exige evidências registradas no registry e na memória antes de autorizar a conclusão do checklist.
-- Não releia projeto.md inteiro; use 'read_file' com start_line e end_line caso precise de seções específicas.
-- Use 'get_project_status' a qualquer momento para consultar o estado e próxima ação ativos.
-=========================================================
+Orientações:
+- Edite com 'replace_in_file'; crie com 'write_file'.
+- Valide com 'run_command' executando 'pytest -v' antes de registrar a pendência com 'update_spec_checklist'.
+- Não releia o projeto.md inteiro: use 'read_file' com start_line e end_line.
+- Use 'get_project_status' uma vez para ver a pendência atual; não repita.
+- Seleção de modelo: o Harness exige evidências no registry e na memória.
 """
 
     # =========================================================
@@ -711,6 +785,10 @@ Orientações para desenvolvimento do projeto:
             if "models" not in matched_skill_names:
                 matched_skill_names.append("models")
 
+    if is_numbered_task:
+        # Só o índice: a tarefa já descreve os passos e o modelo pode usar load_skill.
+        matched_skill_names = list_skills()
+
     skills_loaded = []
     for s_name in matched_skill_names:
         s_res = load_skill(s_name)
@@ -718,32 +796,28 @@ Orientações para desenvolvimento do projeto:
             skills_loaded.append(s_res)
             log("SKILL", f"Skill carregada: {s_res['name']}")
 
-    skill_context = format_skills_context(skills_loaded, budget_chars=SKILLS_BUDGET_CHARS)
+    skill_context = format_skills_context(
+        skills_loaded,
+        budget_chars=0 if is_numbered_task else SKILLS_BUDGET_CHARS,
+    )
 
     # =========================================================
     # RESTRIÇÕES
     # =========================================================
 
-    constraints_context = f"""
-=========================================================
-RESTRIÇÕES DA TAREFA
-=========================================================
-Instalações permitidas: {constraints.allow_install}
-Alterações no sistema permitidas: {constraints.allow_system_changes}
-Operações destrutivas permitidas: {constraints.allow_destructive}
-
-Se uma restrição for False, NÃO tente realizar a operação correspondente.
-=========================================================
-"""
+    constraints_context = (
+        f"RESTRIÇÕES: instalações={constraints.allow_install}; "
+        f"alterações no sistema={constraints.allow_system_changes}; "
+        f"operações destrutivas={constraints.allow_destructive}. Se False, NÃO tente."
+    )
 
     # =========================================================
     # MENSAGENS INICIAIS
     # =========================================================
 
-    system_instructions = f"""
-Você é o agente local autônomo do projeto {PROJECT_ROOT}.
-
-Você possui ferramentas reais para ler, editar, pesquisar, executar comandos e atualizar a especificação do projeto.
+    if is_numbered_task:
+        system_instructions = f"""
+Você é o agente local do projeto {PROJECT_ROOT}. Use as ferramentas para agir; não apenas planeje.
 
 {constraints_context}
 
@@ -751,28 +825,39 @@ Você possui ferramentas reais para ler, editar, pesquisar, executar comandos e 
 
 {skill_context}
 
-=========================================================
-REGRAS FUNDAMENTAIS DE EXECUÇÃO
-=========================================================
-
-1. AÇÃO REAL: Quando a tarefa solicitar verificação ou implementação, use as ferramentas imediatamente. Não produza apenas planos teóricos sem ação.
-
-2. EDIÇÃO DE CÓDIGO: Prefira SEMPRE a ferramenta 'replace_in_file' para alterar arquivos existentes. Forneça linhas de contexto para garantir unicidade.
-
-3. LEITURA DE ARQUIVOS: Para arquivos grandes, use 'read_file' especificando 'start_line' e 'end_line' para economizar contexto.
-
-4. PESQUISA EXTERNA: Use 'web_search' e 'fetch_url' para pesquisar na internet, consultar documentação, releases e dados no GitHub.
-
-5. VALIDAÇÃO AUTOMATIZADA: Toda implementação ou correção deve ser validada executando 'pytest -v' com 'run_command'.
-
-6. ATUALIZAÇÃO DO CHECKLIST: Quando concluir e validar uma pendência do projeto, use 'update_spec_checklist' para registrá-la como concluída [x].
-
-7. COMBATE A REPETIÇÕES: Se uma ferramenta retornar aviso do Harness de repetição ou falha, não insista na mesma chamada com os mesmos argumentos. Mude a abordagem.
-
-8. PERMISSION MANAGER: Respeite as permissões do sistema.
-
-9. FOCO NA CONCLUSÃO: Quando a etapa atual estiver concluída e validada, apresente um resumo objetivo dos resultados e aponte a próxima ação pendente.
+REGRAS: 1) Siga a tarefa passo a passo. 2) Não repita consultas nem comandos iguais. 3) Se algo falhar 2 vezes, pare e explique o que o usuário deve fazer. 4) Respeite o Permission Manager. 5) Ao terminar, resuma em até 3 linhas.
 """
+    else:
+        system_instructions = f"""
+Você é o agente local autônomo do projeto {PROJECT_ROOT}. Use as ferramentas para ler, editar, pesquisar, executar comandos e atualizar a especificação.
+
+{constraints_context}
+
+{project_context}
+
+{skill_context}
+
+REGRAS:
+1. Aja com as ferramentas; não apenas planeje.
+2. Prefira 'replace_in_file' para editar. Arquivo grande: 'read_file' com start_line e end_line.
+3. Pesquisa externa: 'web_search' e 'fetch_url'.
+4. Valide com 'pytest -v' (run_command).
+5. Registre pendências concluídas e validadas com 'update_spec_checklist'.
+6. Não repita chamadas iguais; se falhar, mude a abordagem.
+7. Respeite o Permission Manager.
+8. Ao concluir, resuma e aponte a próxima pendência.
+"""
+
+    messages = [
+        {
+            "role": "system",
+            "content": system_instructions.strip(),
+        },
+        {
+            "role": "user",
+            "content": user_prompt_text,
+        },
+    ]
 
     log(
         "PROMPT_SIZES",
@@ -790,16 +875,19 @@ REGRAS FUNDAMENTAIS DE EXECUÇÃO
         ),
     )
 
-    messages = [
-        {
-            "role": "system",
-            "content": system_instructions.strip(),
-        },
-        {
-            "role": "user",
-            "content": user_prompt_text,
-        },
-    ]
+
+    fixed_tokens = (
+        estimate_tokens(system_instructions)
+        + estimate_tokens(user_prompt_text)
+        + estimate_tokens(json.dumps(visible_tools(False), ensure_ascii=False))
+    )
+
+    if fixed_tokens > NUM_CTX * PROMPT_BUDGET_WARN_RATIO:
+        log(
+            "PROMPT_TOO_BIG",
+            f"prompt fixo estimado em {fixed_tokens} tokens de {NUM_CTX} "
+            f"({fixed_tokens / NUM_CTX:.0%}). Sobra pouco espaço para a conversa.",
+        )
 
     # =========================================================
     # LOOP PRINCIPAL
@@ -1359,6 +1447,8 @@ def resolve_prompt(text: str) -> str | None:
 
 
 if __name__ == "__main__":
+    ensure_utf8_console()
+
     saved = ", ".join(f"@{name}" for name in list_prompts())
 
     if saved:

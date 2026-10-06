@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from core.console import ensure_utf8_console  # noqa: E402
 from core.skills.proposal import (  # noqa: E402
     list_pending,
     promote_skill,
@@ -121,6 +122,8 @@ def cmd_reject(name: str) -> int:
 
 
 def main(argv: list[str]) -> int:
+    ensure_utf8_console()
+
     if len(argv) >= 2 and argv[1] == "list":
         return cmd_list()
 

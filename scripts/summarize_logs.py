@@ -11,6 +11,10 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from core.console import ensure_utf8_console  # noqa: E402
+
 LOG_LINE = re.compile(r"^\[[^\]]+\] (?:\[([^\]]+)\] )?(\w+)(?: \| (.*))?$")
 TOKENS = re.compile(r"input=(\d+) \| output=(\d+)")
 
@@ -125,6 +129,8 @@ def print_report(report: dict) -> None:
 
 
 def main(argv: list[str]) -> int:
+    ensure_utf8_console()
+
     path = Path(argv[1]) if len(argv) > 1 else Path(__file__).resolve().parent.parent / "logs" / "agent.log"
 
     if not path.exists():

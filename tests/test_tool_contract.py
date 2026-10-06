@@ -30,3 +30,37 @@ def test_every_tool_has_validation_rules():
 
 def test_set_smart_candidate_for_benchmark_is_exposed_to_the_model():
     assert "set_smart_candidate_for_benchmark" in schema_by_name()
+
+
+def test_compact_schema_keeps_names_properties_types_and_required():
+    full = {t["function"]["name"]: t["function"] for t in agent.TOOLS}
+    compact = {t["function"]["name"]: t["function"] for t in agent.visible_tools(True)}
+
+    assert set(compact) == set(full)
+
+    for name, fn in full.items():
+        small = compact[name]["parameters"]
+        big = fn["parameters"]
+
+        assert set(small.get("properties", {})) == set(big.get("properties", {})), name
+        assert small.get("required", []) == big.get("required", []), name
+
+        for prop, spec in big.get("properties", {}).items():
+            assert small["properties"][prop].get("type") == spec.get("type"), (name, prop)
+
+
+def test_compact_schema_is_much_smaller_and_bounded():
+    import json
+
+    full_chars = len(json.dumps(agent.TOOLS, ensure_ascii=False))
+    compact_chars = len(json.dumps(agent.visible_tools(True), ensure_ascii=False))
+
+    assert compact_chars < full_chars * 0.85
+
+    for tool in agent.visible_tools(True):
+        function = tool["function"]
+
+        assert len(function["description"]) <= agent.TOOL_DESCRIPTION_MAX_CHARS + 3
+
+        for spec in function["parameters"].get("properties", {}).values():
+            assert len(spec.get("description", "")) <= agent.PARAM_DESCRIPTION_MAX_CHARS + 3

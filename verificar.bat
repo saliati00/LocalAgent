@@ -1,6 +1,8 @@
 @echo off
 rem Confere se esta tudo certo. De duplo clique neste arquivo.
 cd /d "%~dp0"
+chcp 65001 >nul
+set PYTHONUTF8=1
 title Verificacao do LocalAgent
 
 if not exist ".venv\Scripts\python.exe" (

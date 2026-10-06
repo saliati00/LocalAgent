@@ -1,6 +1,8 @@
 @echo off
 rem Inicia o LocalAgent. De duplo clique neste arquivo.
 cd /d "%~dp0"
+chcp 65001 >nul
+set PYTHONUTF8=1
 title LocalAgent
 
 if not exist ".venv\Scripts\python.exe" (
