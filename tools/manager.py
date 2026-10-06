@@ -7,6 +7,8 @@ from tools.filesystem import (
 
 from tools.terminal import run_command
 from tools.environment import check_tools
+from core.skills.loader import load_skill
+from core.skills.proposal import propose_skill
 
 from tools.web import (
     web_search,
@@ -137,6 +139,8 @@ TOOLS = {
     "fetch_url": fetch_url,
     "download_file": download_file,
     "check_tools": check_tools,
+    "load_skill": load_skill,
+    "propose_skill": propose_skill,
     "update_spec_checklist": update_spec_checklist_tool,
     "get_project_status": get_project_status,
     "save_memory": save_memory,
@@ -196,6 +200,23 @@ ALLOWED_ARGUMENTS = {
 
     "check_tools": {
         "names",
+    },
+
+    "load_skill": {
+        "name",
+    },
+
+    "propose_skill": {
+        "name",
+        "description",
+        "triggers",
+        "when_to_use",
+        "steps",
+        "validation",
+        "limits",
+        "tools",
+        "used_web",
+        "source_task",
     },
 
     "update_spec_checklist": {
@@ -284,6 +305,20 @@ REQUIRED_ARGUMENTS = {
 
     "check_tools": {
         "names",
+    },
+
+    "load_skill": {
+        "name",
+    },
+
+    "propose_skill": {
+        "name",
+        "description",
+        "triggers",
+        "when_to_use",
+        "steps",
+        "validation",
+        "limits",
     },
 
     "update_spec_checklist": {

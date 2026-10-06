@@ -20,6 +20,9 @@ PROTECTED = [
     "agent.py",
     ".git/config",
     ".venv/pyvenv.cfg",
+    "skills/windows/SKILL.md",
+    "skills/nova/SKILL.md",
+    "skills_pending/nova/SKILL.md",
 ]
 
 
@@ -47,8 +50,8 @@ def test_replace_in_file_on_protected_path_is_denied():
 
 @pytest.mark.parametrize("relative", [
     "workspace/novo.txt",
-    "skills/nova/SKILL.md",
     "benchmarks/resultado.json",
+    "tools/plugins/novo.py",
 ])
 def test_regular_project_paths_remain_writable(relative):
     writable, error = is_path_writable(PROJECT_ROOT / relative)

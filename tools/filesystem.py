@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from core.paths import PROJECT_ROOT, TMP_ROOT, WORKSPACE_DIR
+from core.paths import PROJECT_ROOT, SKILLS_DIR, SKILLS_PENDING_DIR, TMP_ROOT, WORKSPACE_DIR
 
 
 WORKSPACE = WORKSPACE_DIR.resolve()
@@ -23,6 +23,9 @@ PROTECTED_PATHS = [
     (PROJECT_ROOT / "tools" / "filesystem.py").resolve(),
     (PROJECT_ROOT / "tools" / "manager.py").resolve(),
     (PROJECT_ROOT / "pytest.ini").resolve(),
+    # Skills só mudam por propose_skill (rascunho) e promoção humana.
+    SKILLS_DIR.resolve(),
+    SKILLS_PENDING_DIR.resolve(),
 ]
 
 # Compatibilidade com código que ainda importa o nome antigo.

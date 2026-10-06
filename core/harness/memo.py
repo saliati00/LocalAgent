@@ -9,6 +9,7 @@ READ_ONLY_TOOLS = {
     "list_directory",
     "read_file",
     "check_tools",
+    "load_skill",
 }
 
 CACHE_NOTICE = (

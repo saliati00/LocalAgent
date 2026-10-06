@@ -26,6 +26,7 @@ from core.harness.task_state import TaskState
 from core.memory.store import MemoryStore
 from core.router.model_router import ModelRouter
 from core.skills.loader import (
+    SKILLS_BUDGET_CHARS,
     format_skills_context,
     load_skill,
     match_skills,
@@ -43,6 +44,11 @@ NUM_CTX = 8192
 MAX_ITERATIONS = 30
 MAX_ESCALATIONS = 3
 SMART_MAX_ITERATIONS = 8
+
+# Só o modelo SMART pode propor Skills novas (rascunhos que um humano promove).
+ONLY_SMART_CAN_PROPOSE_SKILLS = True
+
+WEB_TOOLS = {"web_search", "fetch_url", "download_file"}
 PROJECT_SPEC = str(PROJECT_SPEC_PATH)
 
 
@@ -238,6 +244,79 @@ TOOLS = [
                     }
                 },
                 "required": ["names"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "load_skill",
+            "description": "Lê o texto completo de uma Skill (procedimento operacional) pelo nome. Use para as Skills listadas como disponíveis sob demanda.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Nome da Skill (ex.: environment)."
+                    }
+                },
+                "required": ["name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "propose_skill",
+            "description": "Propõe uma NOVA Skill como rascunho (não entra em uso até o usuário revisar e promover). Só para procedimentos que já funcionaram em tarefas reais. Somente o modelo SMART pode usar.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Nome em minúsculas com hífen (ex.: checar-release-github)."
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Uma linha (até 160 caracteres) dizendo para que serve."
+                    },
+                    "triggers": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Palavras que ativam a Skill (3+ caracteres cada, máximo 12)."
+                    },
+                    "when_to_use": {
+                        "type": "string",
+                        "description": "Quando aplicar este procedimento."
+                    },
+                    "steps": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Passos do procedimento, em ordem."
+                    },
+                    "validation": {
+                        "type": "string",
+                        "description": "Como confirmar que deu certo (idealmente um comando verificável)."
+                    },
+                    "limits": {
+                        "type": "string",
+                        "description": "O que a Skill NÃO deve fazer."
+                    },
+                    "tools": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Tools usadas pelo procedimento (opcional)."
+                    },
+                    "used_web": {
+                        "type": "boolean",
+                        "description": "Preenchido pelo Harness; qualquer valor informado é ignorado."
+                    },
+                    "source_task": {
+                        "type": "string",
+                        "description": "Resumo da tarefa real que originou o procedimento (opcional)."
+                    }
+                },
+                "required": ["name", "description", "triggers", "when_to_use", "steps", "validation", "limits"]
             }
         }
     },
@@ -457,6 +536,15 @@ def check_task_constraint(
     return check_constraints(parts, constraints)
 
 
+def task_used_web(state) -> bool:
+    """True se alguma ferramenta de web/download foi chamada nesta tarefa."""
+
+    return any(
+        step.get("type") == "tool_call" and step.get("tool") in WEB_TOOLS
+        for step in state.steps
+    )
+
+
 def answer_skipped_tool_calls(messages: list, skipped_calls, reason: str) -> None:
     """
     Responde as tool calls que o Harness decidiu não executar.
@@ -615,7 +703,7 @@ Orientações para desenvolvimento do projeto:
             skills_loaded.append(s_res)
             log("SKILL", f"Skill carregada: {s_res['name']}")
 
-    skill_context = format_skills_context(skills_loaded)
+    skill_context = format_skills_context(skills_loaded, budget_chars=SKILLS_BUDGET_CHARS)
 
     # =========================================================
     # RESTRIÇÕES
@@ -930,7 +1018,19 @@ REGRAS FUNDAMENTAIS DE EXECUÇÃO
                     if constraint_error is not None:
                         result = constraint_error
                         log("CONSTRAINT", result["error"])
+                    elif name == "propose_skill" and ONLY_SMART_CAN_PROPOSE_SKILLS and not on_smart:
+                        result = {
+                            "success": False,
+                            "error": "Somente o modelo SMART pode propor Skills. Registre a necessidade e continue a tarefa.",
+                            "blocked_by_harness": True,
+                            "tool_error": True,
+                        }
+                        log("SKILL_PROPOSAL_DENIED", "propose_skill fora do modelo SMART")
                     else:
+                        if name == "propose_skill" and isinstance(arguments, dict):
+                            # O Harness, e não o modelo, informa se houve uso da web.
+                            arguments = {**arguments, "used_web": task_used_web(state)}
+
                         result = tool_memo.lookup(name, arguments)
 
                         if result is not None:
