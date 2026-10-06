@@ -32,6 +32,15 @@ SKILL_KEYWORDS = {
         "memória",
         "memoria",
     ],
+    "windows": [
+        "windows",
+        "powershell",
+        "winget",
+        "choco",
+        "scoop",
+        "systeminfo",
+        "win32",
+    ],
     "github": [
         "github",
         "repositório",

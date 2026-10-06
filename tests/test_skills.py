@@ -49,3 +49,12 @@ def test_format_skills_context():
     text = format_skills_context([res])
     assert "SKILL: DEVELOPMENT" in text
     assert "FIM DA SKILL: DEVELOPMENT" in text
+
+
+def test_windows_skill_is_available_and_matched():
+    assert "windows" in list_skills()
+    assert "windows" in match_skills("Verificar o PowerShell e o winget no Windows")
+
+    res = load_skill("windows")
+    assert res["success"] is True
+    assert "where" in res["content"]

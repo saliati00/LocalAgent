@@ -44,7 +44,8 @@ Primeiro identifique o sistema operacional.
 
 Prefira consultar:
 
-`/etc/os-release`
+- Linux: `/etc/os-release`
+- Windows: `systeminfo` (e leia a Skill `windows`)
 
 Depois determine o gerenciador de pacotes correto com base no sistema operacional identificado.
 
@@ -55,6 +56,7 @@ Exemplos:
 - Ubuntu/Debian → apt
 - Arch Linux → pacman
 - openSUSE → zypper
+- Windows → winget (ou choco/scoop, se já instalados)
 
 Não determine o sistema operacional procurando simplesmente qual gerenciador aparece primeiro no PATH.
 
@@ -86,11 +88,8 @@ Verifique cada ferramenta individualmente.
 
 Use:
 
-`command -v <ferramenta>`
-
-Exemplo:
-
-`command -v git`
+- Linux: `command -v <ferramenta>` (exemplo: `command -v git`)
+- Windows: `where <ferramenta>` (exemplo: `where git`); `command -v` não existe no Windows
 
 Faça uma chamada separada para cada ferramenta.
 
