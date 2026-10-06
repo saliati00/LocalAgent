@@ -20,6 +20,7 @@ from core.harness.project_progress import (
 from core.harness.acceptance import check_checklist_acceptance
 
 from core.memory.store import MemoryStore
+from core.paths import PROJECT_SPEC_PATH
 from tools.models import (
     get_model_registry,
     register_model_candidate,
@@ -27,7 +28,7 @@ from tools.models import (
     set_active_smart_model,
 )
 
-PROJECT_SPEC = "/home/bruno/local-agent/specs/projeto.md"
+PROJECT_SPEC = str(PROJECT_SPEC_PATH)
 _memory_store = MemoryStore()
 
 

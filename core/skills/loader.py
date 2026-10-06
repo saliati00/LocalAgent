@@ -1,7 +1,7 @@
 from pathlib import Path
 
+from core.paths import SKILLS_DIR
 
-SKILLS_DIR = Path("/home/bruno/local-agent/skills")
 
 
 SKILL_KEYWORDS = {

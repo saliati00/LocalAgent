@@ -3,7 +3,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-DEFAULT_MEMORY_DIR = Path("/home/bruno/local-agent/memory")
+from core.paths import MEMORY_DIR
+
+DEFAULT_MEMORY_DIR = MEMORY_DIR
 DEFAULT_MEMORY_FILE = DEFAULT_MEMORY_DIR / "store.json"
 
 

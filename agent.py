@@ -1,6 +1,7 @@
 import datetime
 import json
 from pathlib import Path
+from core.paths import PROJECT_ROOT, PROJECT_SPEC_PATH, TASKS_DIR
 import ollama
 
 from core.context.manager import ContextManager
@@ -34,7 +35,7 @@ client = ollama.Client(
 
 NUM_CTX = 8192
 MAX_ITERATIONS = 30
-PROJECT_SPEC = "/home/bruno/local-agent/specs/projeto.md"
+PROJECT_SPEC = str(PROJECT_SPEC_PATH)
 
 
 # =========================================================
@@ -616,7 +617,7 @@ Se uma restrição for False, NÃO tente realizar a operação correspondente.
     # =========================================================
 
     system_instructions = f"""
-Você é o agente local autônomo do projeto /home/bruno/local-agent.
+Você é o agente local autônomo do projeto {PROJECT_ROOT}.
 
 Você possui ferramentas reais para ler, editar, pesquisar, executar comandos e atualizar a especificação do projeto.
 
@@ -1011,7 +1012,7 @@ Orientações:
     summary = state.summary()
 
     try:
-        tasks_dir = Path("/home/bruno/local-agent/tasks")
+        tasks_dir = TASKS_DIR
         tasks_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         task_file = tasks_dir / f"task_{timestamp}.json"

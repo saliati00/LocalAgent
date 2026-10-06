@@ -1,9 +1,9 @@
 import json
 from pathlib import Path
 
+from core.paths import MEMORY_STORE_PATH, PROJECT_SPEC_PATH, REGISTRY_PATH
 
-REGISTRY_PATH = Path("/home/bruno/local-agent/models/registry.json")
-MEMORY_STORE_PATH = Path("/home/bruno/local-agent/memory/store.json")
+
 
 # Modelos conhecidos que são alucinações comuns (não existem oficialmente)
 INVALID_HALLUCINATED_MODELS = {
@@ -29,7 +29,7 @@ def _is_valid_smart_candidate(candidate_name: str) -> tuple[bool, str | None]:
 def check_checklist_acceptance(
     item: str,
     completed: bool,
-    project_spec_path: str = "/home/bruno/local-agent/specs/projeto.md",
+    project_spec_path: str = str(PROJECT_SPEC_PATH),
 ) -> tuple[bool, str | None]:
     """
     Verifica se os critérios de aceitação e evidências formais do Harness

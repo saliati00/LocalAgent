@@ -1,9 +1,9 @@
 from pathlib import Path
 
+from core.paths import PROJECT_ROOT, TMP_ROOT, WORKSPACE_DIR
 
-PROJECT_ROOT = Path("/home/bruno/local-agent").resolve()
-WORKSPACE = (PROJECT_ROOT / "workspace").resolve()
-TMP_ROOT = Path("/tmp").resolve()
+
+WORKSPACE = WORKSPACE_DIR.resolve()
 PROTECTED_SUBDIRS = [
     (PROJECT_ROOT / ".git").resolve(),
     (PROJECT_ROOT / ".venv").resolve(),
@@ -13,8 +13,8 @@ PROTECTED_SUBDIRS = [
 def is_path_writable(target: Path) -> tuple[bool, str]:
     """
     Verifica se um caminho está dentro dos diretórios autorizados para escrita:
-    - Projeto (/home/bruno/local-agent), exceto .git e .venv
-    - /tmp
+    - Raiz do projeto, exceto .git e .venv
+    - diretório temporário do sistema
     """
     target = target.resolve()
 
@@ -45,7 +45,7 @@ def is_path_writable(target: Path) -> tuple[bool, str]:
     if not (in_project or in_tmp):
         return (
             False,
-            f"Escrita permitida somente dentro do projeto ({PROJECT_ROOT}) ou /tmp",
+            f"Escrita permitida somente dentro do projeto ({PROJECT_ROOT}) ou {TMP_ROOT}",
         )
 
     return True, ""

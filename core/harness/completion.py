@@ -1,7 +1,8 @@
 import json
 from pathlib import Path
 
-REGISTRY_PATH = Path("/home/bruno/local-agent/models/registry.json")
+from core.paths import REGISTRY_PATH
+
 
 
 def get_continuation_guidance(

@@ -3,8 +3,9 @@ from pathlib import Path
 import subprocess
 from typing import Any
 
+from core.paths import REGISTRY_PATH
 
-REGISTRY_PATH = Path("/home/bruno/local-agent/models/registry.json")
+
 
 
 COMPLEX_TASK_KEYWORDS = [

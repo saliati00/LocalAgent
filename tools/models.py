@@ -1,9 +1,9 @@
 import json
 from pathlib import Path
 from core.memory.store import MemoryStore
+from core.paths import REGISTRY_PATH
 
 
-REGISTRY_PATH = Path("/home/bruno/local-agent/models/registry.json")
 _memory_store = MemoryStore()
 
 
