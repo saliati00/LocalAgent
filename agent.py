@@ -2,6 +2,7 @@ import datetime
 import json
 from pathlib import Path
 from core.paths import PROJECT_ROOT, PROJECT_SPEC_PATH, TASKS_DIR
+from core.prompts import list_prompts, load_prompt
 import ollama
 
 from core.context.manager import ContextManager
@@ -1300,11 +1301,41 @@ Orientações:
 # ENTRYPOINT
 # =========================================================
 
-if __name__ == "__main__":
-    while True:
-        prompt = input("\nTarefa (ENTER vazio para sair): ").strip()
+def resolve_prompt(text: str) -> str | None:
+    """
+    Converte '@nome' no conteúdo de prompts/nome.md. Texto comum passa direto.
+    Retorna None (após avisar) quando o prompt salvo não existe.
+    """
 
-        if not prompt:
+    text = text.strip()
+
+    if not text.startswith("@"):
+        return text
+
+    ok, content = load_prompt(text[1:])
+
+    if not ok:
+        print(content)
+        return None
+
+    return content
+
+
+if __name__ == "__main__":
+    saved = ", ".join(f"@{name}" for name in list_prompts())
+
+    if saved:
+        print(f"Prompts salvos: {saved}")
+
+    while True:
+        typed = input("\nTarefa (ENTER vazio para sair): ")
+
+        if not typed.strip():
             break
+
+        prompt = resolve_prompt(typed)
+
+        if prompt is None:
+            continue
 
         agent(prompt)

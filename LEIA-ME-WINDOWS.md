@@ -48,7 +48,8 @@ Se aparecer algo como *"Modelo qwen3:8b respondeu: conexão local funcionando"*,
    - `Liste os arquivos da pasta workspace e me diga o que são.`
    - `Verifique se o git e o python estão instalados.`
    - `Crie um arquivo workspace/ola.txt com o texto "oi".`
-3. Para sair, aperte ENTER sem escrever nada.
+3. Para começar o desenvolvimento do projeto, digite apenas **`@iniciar-desenvolvimento`** e aperte ENTER. Isso carrega o prompt salvo na pasta `prompts` (você pode abrir esse arquivo e ajustar o texto).
+4. Para sair, aperte ENTER sem escrever nada.
 
 ---
 

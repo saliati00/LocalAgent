@@ -23,6 +23,8 @@ PROTECTED = [
     "skills/windows/SKILL.md",
     "skills/nova/SKILL.md",
     "skills_pending/nova/SKILL.md",
+    "prompts/iniciar-desenvolvimento.md",
+    "prompts/novo.md",
 ]
 
 

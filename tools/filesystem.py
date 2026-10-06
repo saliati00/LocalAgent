@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from core.paths import PROJECT_ROOT, SKILLS_DIR, SKILLS_PENDING_DIR, TMP_ROOT, WORKSPACE_DIR
+from core.paths import PROJECT_ROOT, PROMPTS_DIR, SKILLS_DIR, SKILLS_PENDING_DIR, TMP_ROOT, WORKSPACE_DIR
 
 
 WORKSPACE = WORKSPACE_DIR.resolve()
@@ -26,6 +26,8 @@ PROTECTED_PATHS = [
     # Skills só mudam por propose_skill (rascunho) e promoção humana.
     SKILLS_DIR.resolve(),
     SKILLS_PENDING_DIR.resolve(),
+    # Prompts salvos são instruções do usuário; o agente não os edita.
+    PROMPTS_DIR.resolve(),
 ]
 
 # Compatibilidade com código que ainda importa o nome antigo.
