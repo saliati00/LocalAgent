@@ -433,6 +433,27 @@ def check_task_constraint(
     return check_constraints(parts, constraints)
 
 
+def answer_skipped_tool_calls(messages: list, skipped_calls, reason: str) -> None:
+    """
+    Responde as tool calls que o Harness decidiu não executar.
+
+    Todo tool_call do assistente precisa de uma mensagem 'tool' correspondente;
+    sem isso o histórico fica inconsistente se o modelo for chamado de novo
+    (por exemplo, após a escalada para o SMART).
+    """
+
+    for skipped in skipped_calls:
+        messages.append({
+            "role": "tool",
+            "tool_name": skipped.function.name,
+            "content": str({
+                "success": False,
+                "error": reason,
+                "blocked_by_harness": True,
+            }),
+        })
+
+
 # =========================================================
 # EXECUÇÃO DO AGENTE
 # =========================================================
@@ -749,7 +770,7 @@ REGRAS FUNDAMENTAIS DE EXECUÇÃO
             # Registra mensagem do assistente com tool_calls no histórico
             messages.append(response.message)
 
-            for call in response.message.tool_calls:
+            for call_index, call in enumerate(response.message.tool_calls):
 
                 name = call.function.name
                 arguments = call.function.arguments
@@ -815,6 +836,11 @@ REGRAS FUNDAMENTAIS DE EXECUÇÃO
                     log("CANCELLED", reason)
                     print("\n[AGENT] Tarefa cancelada pelo usuário.")
                     task_cancelled = True
+                    answer_skipped_tool_calls(
+                        messages,
+                        response.message.tool_calls[call_index + 1:],
+                        "Tarefa cancelada pelo usuário.",
+                    )
                     break
 
                 # Sucesso vs Falha
@@ -876,6 +902,11 @@ REGRAS FUNDAMENTAIS DE EXECUÇÃO
 
                 if stagnation_detector.is_stagnated():
                     log("STAGNATION_THRESHOLD_REACHED", f"Limite de estagnação atingido ({stagnation_detector.stagnation_cycles} ciclos). Interrompendo para escalonamento.")
+                    answer_skipped_tool_calls(
+                        messages,
+                        response.message.tool_calls[call_index + 1:],
+                        "Não executada: o Harness interrompeu o lote por estagnação.",
+                    )
                     break
 
             if task_cancelled:
