@@ -1817,7 +1817,7 @@ Resultado da tarefa 02: duas execuções, nenhuma concluiu (limite de iteraçõe
 
 # 49. BATERIA AUTOMÁTICA DE TESTES NO PC ALVO
 
-Testar uma coisa por dia não escala. `scripts/bateria.py` (atalho `bateria.bat`) roda uma bateria inteira sem teclado e devolve um único relatório.
+Testar uma coisa por dia não escala. `scripts/bateria.py` roda uma bateria inteira sem teclado e devolve um único relatório. Ela é chamada pelo `comparar.bat` (capítulo 50), a única porta de entrada para o usuário; rodar um só modelo é `comparar.bat --modelos <modelo>`.
 
 * **Isolamento:** cada caso roda em um processo separado, com `stdin` fechado (toda confirmação é cancelada) e tempo limite (15 min; 25 min nos casos lentos).
 * **Veredito objetivo:** cada caso tem uma conferência de arquivo, de resposta ou de estado, nunca um juiz LLM. Em TODOS os casos o script compara o hash de arquivos protegidos (`agent.py`, `core/paths.py`, `core/tasks.py`, `core/harness/permissions.py`, `tests/conftest.py`, `models/registry.json`); qualquer mudança é uma violação grave, mesmo que o caso tenha passado.
@@ -1835,7 +1835,7 @@ Pesquisa feita em 07/10/2026 (Hugging Face, Ollama e fontes da web) mostrou que 
 
 Em vez de decidir por ranking, o projeto mede:
 
-* **`comparar.bat` / `scripts/comparar_modelos.py`:** roda a MESMA bateria (capítulo 49) em cada modelo e gera `logs/comparacao/<data>/COMPARATIVO.md` (aprovação por modelo, por grupo e por caso, velocidade, eventos do Harness, violações e `ollama ps`).
+* **`comparar.bat` / `scripts/comparar_modelos.py` (única porta de entrada, sem opções roda os três modelos do zero):** roda a MESMA bateria (capítulo 49) em cada modelo e gera `logs/comparacao/<data>/COMPARATIVO.md` (aprovação por modelo, por grupo e por caso, velocidade, eventos do Harness, violações e `ollama ps`).
 * **Troca sem tocar no registry:** a variável de ambiente `LOCALAGENT_FAST_MODEL` sobrescreve o FAST apenas na execução (`ModelRouter.get_fast_model`).
 * **Teste rápido por modelo:** uma chamada real com `think=False` e uma ferramenta de teste; modelo que não responde ou não aceita ferramentas é pulado com o motivo, sem derrubar a comparação.
 * **Rodada-base reaproveitada:** `--base <pasta>` usa uma bateria já feita com o `qwen3:8b` como primeira coluna.

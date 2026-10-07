@@ -1,12 +1,6 @@
 LOCALAGENT - O QUE FAZER EM CASA
 =================================
 
-ANTES DE SAIR DO TRABALHO
-[ ] Publicar os commits (senao o clone de casa vem sem a comparacao):
-        git push origin main
-    Depois confira: "git status" deve dizer "up to date with origin/main".
-
-
 EM CASA, NA ORDEM
 [ ] 1. Clonar o projeto:
         git clone https://github.com/saliati00/LocalAgent.git
@@ -18,26 +12,24 @@ EM CASA, NA ORDEM
         ollama --version
         Numero que deu: ______________________
 
-[ ] 4. Rodar a bateria com o modelo atual: duplo clique em  bateria.bat
-        Dura de 1 a 1,5 hora. Nao precisa digitar nada.
-        Versao curta (uns 25 min), se precisar:  bateria.bat --rapido
-
-[ ] 5. Ver o nome da pasta que a bateria criou (Prompt de Comando, na pasta do projeto):
-        dir logs\bateria
-        Nome da pasta: ______________________
-
-[ ] 6. Teste que so voce pode fazer (2 minutos), com a bateria PARADA:
+[ ] 4. Teste que so voce pode fazer (2 minutos), ANTES de iniciar o passo 5:
         - abrir iniciar.bat
         - pedir:  Instale o cmake com winget.
         - a tela de confirmacao deve aparecer legivel
         - responder C e ENTER (cancelar) e sair do agente (ENTER vazio)
         Apareceu legivel? ( ) sim  ( ) nao
 
-[ ] 7. Rodar a comparacao de modelos (trocar NOME_DA_PASTA pelo nome do passo 5):
-        comparar.bat --base logs\bateria\NOME_DA_PASTA
-        - Ele lista o que falta baixar (cerca de 10,5 GB: qwen3.5:9b e qwen3.5:4b)
-          e pergunta "Baixar agora? (S/N)". Responder S.
-        - Depois roda sozinho por algumas horas. Pode deixar de um dia para o outro.
+[ ] 5. Duplo clique em:  comparar.bat
+        - Ele roda a MESMA bateria automatica em tres modelos:
+              qwen3:8b (o atual), qwen3.5:9b e qwen3.5:4b
+        - No comeco ele lista o que falta baixar (cerca de 10,5 GB: qwen3.5:9b e
+          qwen3.5:4b) e pergunta "Baixar agora? (S/N)". Responder S.
+        - Depois e so deixar rodando: de 3 a 4,5 horas, sem digitar nada.
+          Pode deixar de um dia para o outro.
+        - No fim aparece uma tabela no terminal (um modelo por linha).
+
+        Versao curta (bateria reduzida em cada modelo), se precisar:
+              comparar.bat --rapido
 
 
 CUIDADOS ENQUANTO RODA
@@ -50,10 +42,9 @@ CUIDADOS ENQUANTO RODA
 
 O QUE TRAZER DE VOLTA PARA MIM
 [ ] A pasta  logs\comparacao  inteira (tem o COMPARATIVO.md com a tabela)
-[ ] A pasta  logs\bateria  inteira
 [ ] O arquivo  logs\agent.log
 [ ] O numero do "ollama --version" (passo 3)
-[ ] Se o teste do passo 6 apareceu legivel (sim/nao)
+[ ] Se o teste do passo 4 apareceu legivel (sim/nao)
 
 
 SE DER ERRO

@@ -1,5 +1,5 @@
 @echo off
-rem Compara modelos (qwen3:8b x qwen3.5:9b x qwen3.5:4b) com a mesma bateria. De duplo clique.
+rem Roda a bateria automatica em cada modelo (qwen3:8b, qwen3.5:9b, qwen3.5:4b) e compara. De duplo clique.
 cd /d "%~dp0"
 chcp 65001 >nul
 set PYTHONUTF8=1
@@ -18,8 +18,8 @@ if errorlevel 1 (
     timeout /t 8 /nobreak >nul
 )
 
-echo Isto pode levar varias horas (uma bateria completa por modelo). Deixe rodando a noite.
-echo Se voce ja rodou a bateria com o qwen3:8b, use:  comparar.bat --base logs\bateria\NOME_DA_PASTA
+echo Isto leva de 3 a 4,5 horas (uma bateria completa por modelo). Deixe rodando e nao mexa no computador.
+echo Versao curta:  comparar.bat --rapido
 echo.
 .venv\Scripts\python.exe scripts\comparar_modelos.py %*
 

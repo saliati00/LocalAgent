@@ -29,27 +29,23 @@ Abra a pasta `LocalAgent` no Explorador de Arquivos, clique na **barra de endere
 
 ---
 
-## Bateria automática (faça ISTO primeiro)
-Em vez de digitar teste por teste, dê duplo clique em **`bateria.bat`** e deixe rodando (cerca de 1 a 1,5 hora, sem mexer no teclado). Ela roda sozinha 26 casos (35 execuções, os simples repetidos duas vezes): tarefas pequenas, edição de arquivos, busca, web, segurança (pedido de instalação, arquivo protegido, troca de modelo, apagar pasta, ordem escondida dentro de arquivo, tarefa que é sua), as tarefas 1 e 2 (inclusive repetidas) e, só como informação, a tarefa 3 e o desenvolvimento geral. Toda confirmação é cancelada automaticamente, então nada perigoso acontece.
+## Bateria e comparação de modelos (faça ISTO primeiro)
+Em vez de digitar teste por teste, dê duplo clique em **`comparar.bat`** e deixe rodando. Ele é a única porta de entrada: roda **a mesma bateria automática, sem digitar nada, em cada modelo** (`qwen3:8b`, `qwen3.5:9b` e `qwen3.5:4b`) e no fim mostra a comparação. Leva de 3 a 4,5 horas (cerca de 1 a 1,5 hora por modelo); deixe de um dia para o outro.
 
-Versão curta (cerca de 25 minutos, sem as tarefas longas): `bateria.bat --rapido`.
+Antes de começar ele mostra quais modelos faltam e o tamanho do download (cerca de 7 GB o 9b e 3,5 GB o 4b) e **pergunta se pode baixar** (S/N). Depois, para cada modelo: um teste rápido (o modelo responde? chama ferramenta?), a bateria de 26 casos (cerca de 35 execuções, os simples repetidos duas vezes) e a descarga do modelo da placa. Um modelo incompatível é pulado com o motivo anotado, sem derrubar o resto.
 
-No final ela escreve **`logs\bateria\<data>\RELATORIO.md`** (tabela com passou/falhou por caso, tempo, ferramentas, eventos do Harness, velocidade e `ollama ps`) e restaura sozinha os arquivos que o agente possa ter mexido (`memory\store.json`, `models\registry.json`, `specs\projeto.md`). **Traga a pasta `logs\bateria` inteira e o `logs\agent.log`.**
+**O que a bateria testa:** tarefas pequenas, edição de arquivos, busca, web, segurança (pedido de instalação, arquivo protegido, troca de modelo, apagar pasta, ordem escondida dentro de arquivo, tarefa que é sua), as tarefas 1 e 2 (inclusive repetidas) e, só como informação, a tarefa 3 e o desenvolvimento geral. Toda confirmação é cancelada automaticamente, então nada perigoso acontece. Os arquivos que o agente possa ter mexido (`memory\store.json`, `models\registry.json`, `specs\projeto.md`) são restaurados sozinhos.
 
-Os testes manuais abaixo ficam só para o que a bateria não cobre: ver a tela de confirmação com os próprios olhos (teste 6), a instalação (testes 0 e 1) e o Ctrl+C. Se a bateria rodou, pode pular os testes 2, 3, 4, 7 e 8.
+**No fim:** o terminal mostra uma **tabela de visão geral** (um modelo por linha: casos ok e falhos, erros de ferramenta, tokens de entrada e saída, tokens/s e minutos), e o relatório completo fica em **`logs\comparacao\<data>\COMPARATIVO.md`**, com aprovação por grupo e caso a caso, eventos do Harness e o `ollama ps` de cada modelo (para ver se coube na placa). **Traga a pasta `logs\comparacao` inteira e o `logs\agent.log`.**
 
-## Comparar modelos (depois da bateria)
-Para decidir se vale trocar o `qwen3:8b` por um modelo mais novo (`qwen3.5:9b` e `qwen3.5:4b`), rode **a mesma bateria** em cada um. Se você já fez a bateria com o `qwen3:8b`, reaproveite essa rodada (não precisa repetir) dando duplo clique em **`comparar.bat`** com a pasta dela:
-
-```
-comparar.bat --base logs\bateria\NOME_DA_PASTA
-```
-
-Sem `--base`, ele roda os três modelos do zero (várias horas; deixe de um dia para o outro). Antes de começar ele mostra quais modelos faltam e o tamanho do download (cerca de 7 GB o 9b e 3,5 GB o 4b) e **pergunta se pode baixar** (S/N). Depois, para cada modelo ele faz um teste rápido (o modelo responde? chama ferramenta?), roda a bateria e descarrega o modelo da placa. Um modelo incompatível é pulado com o motivo anotado, sem derrubar o resto.
-
-No fim, o terminal mostra uma **tabela de visão geral** (um modelo por linha: casos ok e falhos, erros de ferramenta, tokens de entrada e saída, tokens/s e minutos). O resultado completo é **`logs\comparacao\<data>\COMPARATIVO.md`**: aprovação por modelo, por grupo e caso a caso, velocidade, eventos do Harness e o `ollama ps` de cada um (para ver se coube na placa). Traga a pasta `logs\comparacao` inteira e o `logs\agent.log`.
+Opções (todas opcionais):
+- `comparar.bat --rapido`: bateria curta em cada modelo (sem as tarefas longas).
+- `comparar.bat --modelos qwen3:8b`: só um modelo (ou uma lista separada por vírgulas).
+- `comparar.bat --sim`: baixa os modelos que faltam sem perguntar.
 
 Para trocar de modelo só numa execução (sem mexer no registro), o projeto lê a variável `LOCALAGENT_FAST_MODEL`.
+
+Os testes manuais abaixo ficam só para o que a bateria não cobre: ver a tela de confirmação com os próprios olhos (teste 6), a instalação (testes 0 e 1) e o Ctrl+C. Faça o teste 6 **antes** de iniciar o `comparar.bat`, com nada rodando.
 
 ## Teste 0 — Versão do Ollama
 Faça:
@@ -159,7 +155,7 @@ Anote: o `Status` final mostrado em `[STATE]`, quantas iterações, e se aparece
 Velocidade (rápido, ok ou lento): _______
 
 ## O que me trazer de volta
-- **Se rodou a bateria:** a pasta `logs\bateria` e o `logs\agent.log` (basta isso, mais o `ollama --version` do teste 0).
+- **Se rodou o `comparar.bat`:** a pasta `logs\comparacao` e o `logs\agent.log` (basta isso, mais o `ollama --version` do teste 0).
 - A tabela preenchida.
 - A saída completa do `summarize_logs.py` (teste 4) e do `ollama ps` (teste 5).
 - A mensagem de erro de qualquer teste que falhou.
