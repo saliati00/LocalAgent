@@ -1160,6 +1160,7 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [x] Tools por perfil: grupo base de 8 tools e grupos extras sob demanda (pronto quando: pytest tests/test_tool_profiles.py passa)
 * [x] Busca no código com a tool search_files (pronto quando: pytest tests/test_search_files.py passa)
 * [x] Backup automático antes de sobrescrever arquivos e script de restauração (pronto quando: pytest tests/test_backups.py passa)
+* [x] Comparação de modelos FAST com a mesma bateria e relatório lado a lado (pronto quando: pytest tests/test_comparar_modelos.py passa)
 * [x] Bateria automática de testes no PC alvo: 26 casos sem teclado, relatório único e restauração dos arquivos (pronto quando: pytest tests/test_bateria.py passa)
 * [x] Aceite executável nas tarefas numeradas: o Harness roda o teste de aceite no lugar do juiz LLM (pronto quando: pytest tests/test_real_log_fixes.py passa)
 * [x] Primeira rodada real medida: velocidade, tokens por segundo e calibração da estimativa de tokens (pronto quando: capítulo 48 da spec registra os números do log de 07/10/2026)
@@ -1534,7 +1535,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-415 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+428 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1824,3 +1825,19 @@ Testar uma coisa por dia não escala. `scripts/bateria.py` (atalho `bateria.bat`
 * **Efeitos colaterais:** `memory/store.json`, `models/registry.json` e `specs/projeto.md` são restaurados ao final, e o `git status` do fim entra no relatório.
 * **Relatório:** `logs/bateria/<data>/RELATORIO.md` (resultado por grupo e por execução, eventos do Harness somados, velocidade, `ollama ps`) mais a transcrição de cada caso.
 * **Limite conhecido:** a verificação da resposta textual (por exemplo, "admitiu que o arquivo não existe") é por palavras; serve para triagem, não para prova.
+
+
+---
+
+# 50. COMPARAÇÃO DE MODELOS FAST
+
+Pesquisa feita em 07/10/2026 (Hugging Face, Ollama e fontes da web) mostrou que o `qwen3:8b` está uma geração atrás: o **Qwen3.5** (fev/2026) existe no Ollama em 0.8b, 2b, 4b, 9b, 27b, 35b e 122b, com contexto de 256K, entrada de imagem e treino declarado para agentes. Os números do fabricante para o 9B são BFCL-V4 66,1, TAU2-Bench 79,1 e LiveCodeBench v6 65,6. Dois pontos de cautela: (1) os ganhos de ranking são medidos com raciocínio ligado e o agente usa `think=False`; (2) o 9b ocupa de 6,6 a 7,6 GB e pode vazar da GPU de 8 GB para a CPU, enquanto o 4b (3,3 a 4 GB) cabe com folga. A conclusão sobre o Qwen2.5-Coder 7B (set/2024) foi descartá-lo por idade.
+
+Em vez de decidir por ranking, o projeto mede:
+
+* **`comparar.bat` / `scripts/comparar_modelos.py`:** roda a MESMA bateria (capítulo 49) em cada modelo e gera `logs/comparacao/<data>/COMPARATIVO.md` (aprovação por modelo, por grupo e por caso, velocidade, eventos do Harness, violações e `ollama ps`).
+* **Troca sem tocar no registry:** a variável de ambiente `LOCALAGENT_FAST_MODEL` sobrescreve o FAST apenas na execução (`ModelRouter.get_fast_model`).
+* **Teste rápido por modelo:** uma chamada real com `think=False` e uma ferramenta de teste; modelo que não responde ou não aceita ferramentas é pulado com o motivo, sem derrubar a comparação.
+* **Rodada-base reaproveitada:** `--base <pasta>` usa uma bateria já feita com o `qwen3:8b` como primeira coluna.
+* **Critério de escolha (impresso no relatório):** maior aprovação nos casos que contam; descartar quem violar arquivo protegido, ficar abaixo de 15 tokens/s ou aparecer com CPU no `ollama ps`; em empate, o mais rápido.
+* **Download:** os modelos que faltam são listados com o tamanho e só são baixados após confirmação (S/N) do usuário.

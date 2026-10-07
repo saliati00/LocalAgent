@@ -38,6 +38,19 @@ No final ela escreve **`logs\bateria\<data>\RELATORIO.md`** (tabela com passou/f
 
 Os testes manuais abaixo ficam só para o que a bateria não cobre: ver a tela de confirmação com os próprios olhos (teste 6), a instalação (testes 0 e 1) e o Ctrl+C. Se a bateria rodou, pode pular os testes 2, 3, 4, 7 e 8.
 
+## Comparar modelos (depois da bateria)
+Para decidir se vale trocar o `qwen3:8b` por um modelo mais novo (`qwen3.5:9b` e `qwen3.5:4b`), rode **a mesma bateria** em cada um. Se você já fez a bateria com o `qwen3:8b`, reaproveite essa rodada (não precisa repetir) dando duplo clique em **`comparar.bat`** com a pasta dela:
+
+```
+comparar.bat --base logs\bateria\NOME_DA_PASTA
+```
+
+Sem `--base`, ele roda os três modelos do zero (várias horas; deixe de um dia para o outro). Antes de começar ele mostra quais modelos faltam e o tamanho do download (cerca de 7 GB o 9b e 3,5 GB o 4b) e **pergunta se pode baixar** (S/N). Depois, para cada modelo ele faz um teste rápido (o modelo responde? chama ferramenta?), roda a bateria e descarrega o modelo da placa. Um modelo incompatível é pulado com o motivo anotado, sem derrubar o resto.
+
+O resultado é **`logs\comparacao\<data>\COMPARATIVO.md`**: aprovação por modelo, por grupo e caso a caso, velocidade, eventos do Harness e o `ollama ps` de cada um (para ver se coube na placa). Traga a pasta `logs\comparacao` inteira e o `logs\agent.log`.
+
+Para trocar de modelo só numa execução (sem mexer no registro), o projeto lê a variável `LOCALAGENT_FAST_MODEL`.
+
 ## Teste 0 — Versão do Ollama
 Faça:
 ```

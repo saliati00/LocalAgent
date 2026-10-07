@@ -351,6 +351,12 @@ def run_case(case_def: dict) -> dict:
 # Orquestração (processo pai)
 # ---------------------------------------------------------
 
+def current_fast_model() -> str:
+    from core.router.model_router import ModelRouter
+
+    return ModelRouter().get_fast_model() or "?"
+
+
 def run_cmd(args: list[str]) -> str:
     try:
         done = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
@@ -413,6 +419,7 @@ def build_report(results: list[dict], meta: dict) -> str:
         "# Relatório da bateria",
         "",
         f"- Data: {meta['date']}",
+        f"- Modelo FAST: {meta.get('model', '?')}",
         f"- Ollama: {meta['ollama_version']}",
         f"- Duração total: {meta['minutes']} min",
         f"- **Resultado: {passed} de {len(counted)} execuções passaram** ({round(100 * passed / len(counted)) if counted else 0}%)",
@@ -475,7 +482,7 @@ def orchestrate(args) -> int:
         print("O Ollama não respondeu. Abra o Ollama e rode de novo (ou use o iniciar.bat uma vez).")
         return 1
 
-    folder = ROOT / "logs" / "bateria" / started_at.strftime("%Y%m%d_%H%M%S")
+    folder = Path(args.saida) if args.saida else ROOT / "logs" / "bateria" / started_at.strftime("%Y%m%d_%H%M%S")
     folder.mkdir(parents=True, exist_ok=True)
 
     backups = {name: (ROOT / name).read_bytes() for name in RESTORED_AT_END if (ROOT / name).exists()}
@@ -512,6 +519,7 @@ def orchestrate(args) -> int:
             restored.append(name)
 
     meta = {
+        "model": current_fast_model(),
         "date": started_at.strftime("%d/%m/%Y %H:%M"),
         "ollama_version": version.splitlines()[-1],
         "minutes": round((time.time() - began) / 60, 1),
@@ -521,6 +529,7 @@ def orchestrate(args) -> int:
     }
 
     report = build_report(results, meta)
+    (folder / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     (folder / "RELATORIO.md").write_text(report, encoding="utf-8")
     (folder / "resultados.json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -536,6 +545,7 @@ def main(argv=None) -> int:
     parser.add_argument("--listar", action="store_true", help="lista os casos e sai")
     parser.add_argument("--so", help="ids separados por vírgula")
     parser.add_argument("--repeticoes", type=int, default=2, help="rodadas dos casos simples (padrão 2)")
+    parser.add_argument("--saida", help="pasta de saída do relatório (padrão: logs/bateria/<data>)")
     parser.add_argument("--run-case", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 

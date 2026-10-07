@@ -1,9 +1,13 @@
 import json
+import os
 from pathlib import Path
 import subprocess
 from typing import Any
 
 from core.paths import REGISTRY_PATH
+
+# Troca o FAST só nesta execução, sem tocar no registry (usada pela comparação de modelos).
+FAST_MODEL_ENV = "LOCALAGENT_FAST_MODEL"
 
 
 
@@ -70,6 +74,11 @@ class ModelRouter:
         Retorna None se nenhum modelo FAST estiver definido no registry.
         O papel FAST é determinado pelo registry, não por um nome hardcoded.
         """
+        override = os.environ.get(FAST_MODEL_ENV, "").strip()
+
+        if override:
+            return override
+
         return self._data.get("active_fast_model") or None
 
     def get_smart_model(self) -> str | None:
