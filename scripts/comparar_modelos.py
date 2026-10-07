@@ -139,6 +139,9 @@ def summarize_model(entry: dict) -> dict:
         "minutes": round(sum(seconds) / 60, 1),
         "avg_seconds": round(sum(seconds) / len(seconds), 1) if seconds else 0,
         "avg_tok_s": round(sum(speeds) / len(speeds), 1) if speeds else None,
+        "tokens_in": sum(r.get("tokens_in", 0) for r in results) if any("tokens_in" in r for r in results) else None,
+        "tokens_out": sum(r.get("tokens_out", 0) for r in results) if any("tokens_in" in r for r in results) else None,
+        "calls": sum(r.get("model_calls", 0) for r in results),
         "tools": sum(r["tools"] for r in results),
         "failed_tools": sum(r["failed_tools"] for r in results),
         "violations": sum(1 for r in results if r.get("violations")),
@@ -172,10 +175,40 @@ def case_cells(entries: list[dict]) -> dict[str, dict[str, str]]:
     return table
 
 
+def cli_table(summaries: list[dict]) -> str:
+    """Tabela de texto puro para o terminal: um modelo por linha, os números que importam."""
+
+    headers = ["Modelo", "Casos ok", "%", "Casos falhos", "Erros de ferramenta", "Tokens entrada", "Tokens saída", "tok/s", "Minutos"]
+    rows = []
+
+    for s in summaries:
+        if s["skipped"]:
+            rows.append([s["label"], "NÃO RODOU", "-", "-", "-", "-", "-", "-", "-"])
+            continue
+
+        def number(value):
+            return "n/d" if value is None else f"{value:,}".replace(",", ".")
+
+        rows.append([
+            s["label"], f"{s['passed']}/{s['total']}", f"{s['rate']}%", str(s["total"] - s["passed"]), str(s["failed_tools"]),
+            number(s["tokens_in"]), number(s["tokens_out"]), "n/d" if s["avg_tok_s"] is None else str(s["avg_tok_s"]), str(s["minutes"]),
+        ])
+
+    widths = [max(len(row[i]) for row in [headers] + rows) for i in range(len(headers))]
+
+    def line(cells):
+        return " | ".join(cell.ljust(widths[i]) for i, cell in enumerate(cells))
+
+    separator = "-+-".join("-" * width for width in widths)
+
+    return "\n".join([line(headers), separator] + [line(row) for row in rows])
+
+
 def build_comparison(entries: list[dict], date: str) -> str:
     runnable = [e for e in entries if e.get("results")]
     summaries = [summarize_model(e) for e in entries]
-    lines = ["# Comparativo de modelos FAST", "", f"- Data: {date}", f"- Modelos: {', '.join(e['label'] for e in entries)}", ""]
+    lines = ["# Comparativo de modelos FAST", "", f"- Data: {date}", f"- Modelos: {', '.join(e['label'] for e in entries)}", "",
+             "## Visão geral", "", "```", cli_table(summaries), "```", ""]
 
     lines += ["## Resumo", "",
               "| Modelo | Aprovação | Tempo total (min) | s/caso | tokens/s | Ferramentas (falhas) | Violações | Chamou ferramenta no teste rápido |",
@@ -340,6 +373,7 @@ def finish(entries: list[dict], root: Path) -> int:
     report = build_comparison(entries, datetime.datetime.now().strftime("%d/%m/%Y %H:%M"))
     (root / "COMPARATIVO.md").write_text(report, encoding="utf-8")
     print("\n" + report)
+    print("\nVISÃO GERAL\n" + cli_table([summarize_model(e) for e in entries]))
     print(f"\nTraga de volta a pasta inteira: {root}\n(e o arquivo logs\\agent.log)")
     return 0
 

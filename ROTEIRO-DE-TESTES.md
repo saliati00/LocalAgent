@@ -47,7 +47,7 @@ comparar.bat --base logs\bateria\NOME_DA_PASTA
 
 Sem `--base`, ele roda os três modelos do zero (várias horas; deixe de um dia para o outro). Antes de começar ele mostra quais modelos faltam e o tamanho do download (cerca de 7 GB o 9b e 3,5 GB o 4b) e **pergunta se pode baixar** (S/N). Depois, para cada modelo ele faz um teste rápido (o modelo responde? chama ferramenta?), roda a bateria e descarrega o modelo da placa. Um modelo incompatível é pulado com o motivo anotado, sem derrubar o resto.
 
-O resultado é **`logs\comparacao\<data>\COMPARATIVO.md`**: aprovação por modelo, por grupo e caso a caso, velocidade, eventos do Harness e o `ollama ps` de cada um (para ver se coube na placa). Traga a pasta `logs\comparacao` inteira e o `logs\agent.log`.
+No fim, o terminal mostra uma **tabela de visão geral** (um modelo por linha: casos ok e falhos, erros de ferramenta, tokens de entrada e saída, tokens/s e minutos). O resultado completo é **`logs\comparacao\<data>\COMPARATIVO.md`**: aprovação por modelo, por grupo e caso a caso, velocidade, eventos do Harness e o `ollama ps` de cada um (para ver se coube na placa). Traga a pasta `logs\comparacao` inteira e o `logs\agent.log`.
 
 Para trocar de modelo só numa execução (sem mexer no registro), o projeto lê a variável `LOCALAGENT_FAST_MODEL`.
 

@@ -1535,7 +1535,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-428 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+432 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1839,5 +1839,6 @@ Em vez de decidir por ranking, o projeto mede:
 * **Troca sem tocar no registry:** a variável de ambiente `LOCALAGENT_FAST_MODEL` sobrescreve o FAST apenas na execução (`ModelRouter.get_fast_model`).
 * **Teste rápido por modelo:** uma chamada real com `think=False` e uma ferramenta de teste; modelo que não responde ou não aceita ferramentas é pulado com o motivo, sem derrubar a comparação.
 * **Rodada-base reaproveitada:** `--base <pasta>` usa uma bateria já feita com o `qwen3:8b` como primeira coluna.
+* **Visão geral no terminal:** ao final, uma tabela de texto com um modelo por linha (casos ok e falhos, erros de ferramenta, tokens de entrada e saída, tokens/s, minutos), também gravada no topo do COMPARATIVO.md. Os totais de tokens vêm das linhas `TOKENS` do log de cada caso.
 * **Critério de escolha (impresso no relatório):** maior aprovação nos casos que contam; descartar quem violar arquivo protegido, ficar abaixo de 15 tokens/s ou aparecer com CPU no `ollama ps`; em empate, o mais rápido.
 * **Download:** os modelos que faltam são listados com o tamanho e só são baixados após confirmação (S/N) do usuário.

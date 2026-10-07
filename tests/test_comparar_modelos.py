@@ -11,6 +11,7 @@ SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import comparar_modelos as cmp  # noqa: E402
+import bateria  # noqa: E402
 from core.router.model_router import FAST_MODEL_ENV, ModelRouter  # noqa: E402
 
 
@@ -160,3 +161,43 @@ def test_rebuild_reads_every_subfolder(tmp_path, capsys):
     text = (tmp_path / "COMPARATIVO.md").read_text(encoding="utf-8")
 
     assert "modelo-a" in text and "modelo-b" in text
+
+
+def test_cli_table_is_plain_text_with_one_row_per_model():
+    a = entry("qwen3:8b", [run("a", True, failed=1), run("b", False, failed=2)])
+    b = entry("qwen3.5:4b", [run("a", True), run("b", True)])
+    a["results"][0].update(tokens_in=1000, tokens_out=200)
+    a["results"][1].update(tokens_in=2500, tokens_out=300)
+    gone = {"label": "qwen3.5:9b", "results": [], "meta": {}, "skipped": "não instalado"}
+
+    table = cmp.cli_table([cmp.summarize_model(e) for e in (a, b, gone)])
+    rows = table.splitlines()
+
+    assert len(rows) == 5 and "|" in rows[0] and "Tokens entrada" in rows[0]
+    assert "1/2" in rows[2] and "50%" in rows[2] and "3.500" in rows[2] and "500" in rows[2]
+    assert "n/d" in rows[3] and "2/2" in rows[3]
+    assert "NÃO RODOU" in rows[4]
+    assert "```" not in table
+
+
+def test_comparison_report_starts_with_the_overview_table():
+    report = cmp.build_comparison([entry("m", [run("a", True)])], "01/01/2027")
+
+    assert report.index("## Visão geral") < report.index("## Resumo")
+
+
+def test_battery_token_regex_matches_the_real_log_format():
+    line = "[2026-10-07 10:00:00] [abc123] TOKENS | input=1801 | output=61 | total=1862 | seconds=1.0 | tok_s=61.0"
+
+    found = bateria.TOKENS_LINE.search(line)
+
+    assert (int(found.group(1)), int(found.group(2))) == (1801, 61)
+
+
+def test_battery_result_has_token_totals(tmp_path, monkeypatch):
+    monkeypatch.setattr(bateria, "ROOT", tmp_path)
+    monkeypatch.setattr(bateria, "BATERIA_DIR", tmp_path / "workspace" / "bateria")
+
+    result = bateria.run_case(next(c for c in bateria.CASES if c["id"] == "tarefa-do-usuario"))
+
+    assert result["tokens_in"] == 0 and result["tokens_out"] == 0

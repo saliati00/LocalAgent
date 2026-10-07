@@ -50,6 +50,7 @@ RESTORED_AT_END = ["memory/store.json", "models/registry.json", "specs/projeto.m
 
 DEFAULT_TIMEOUT = 900
 SLOW_TIMEOUT = 1500
+TOKENS_LINE = re.compile(r"TOKENS \| input=(\d+) \| output=(\d+)")
 NO_ANSWER = re.compile(
     r"não existe|nao existe|não encontr|nao encontr|inexist|não foi poss|nao foi poss|não consegui|nao consegui|erro|não há|nao ha",
     re.IGNORECASE,
@@ -331,6 +332,8 @@ def run_case(case_def: dict) -> dict:
     from summarize_logs import summarize
 
     report = summarize(lines)
+    token_pairs = [TOKENS_LINE.search(line) for line in lines]
+    token_pairs = [m for m in token_pairs if m]
 
     return {
         "id": case_def["id"],
@@ -342,6 +345,8 @@ def run_case(case_def: dict) -> dict:
         "failed_tools": failed,
         "events": report["events"],
         "model_calls": report["model_calls"],
+        "tokens_in": sum(int(m.group(1)) for m in token_pairs),
+        "tokens_out": sum(int(m.group(2)) for m in token_pairs),
         "tok_s": report["generation_tokens_per_second"].get("avg"),
         "violations": violations,
     }
@@ -453,6 +458,9 @@ def build_report(results: list[dict], meta: dict) -> str:
 
     lines += ["", "## Eventos do Harness (soma de todos os casos)", ""]
     lines += [f"- {name}: {count}" for name, count in sorted(totals.items())] or ["- nenhum"]
+
+    if any("tokens_in" in r for r in results):
+        lines += ["", "## Tokens", "", f"- entrada: {sum(r.get('tokens_in', 0) for r in results)} | saída: {sum(r.get('tokens_out', 0) for r in results)} | chamadas ao modelo: {sum(r['model_calls'] for r in results)}"]
 
     speeds = [r["tok_s"] for r in results if r["tok_s"]]
     if speeds:
