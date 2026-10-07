@@ -120,3 +120,28 @@ def test_backups_dir_is_protected_from_the_agent():
     assert writable is False
 
     assert write_file(str(PROJECT_ROOT / "backups" / "x.txt"), "x")["success"] is False
+
+
+def test_two_backups_of_the_same_file_in_the_same_instant_do_not_overwrite_each_other(sandbox, monkeypatch):
+    from datetime import datetime as real_datetime
+
+    root, store = sandbox
+
+    class FrozenDatetime(real_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return real_datetime(2026, 10, 7, 8, 30, 6, 428000)
+
+    monkeypatch.setattr(backups, "datetime", FrozenDatetime)
+
+    target = root / "a.txt"
+
+    target.write_text("um", encoding="utf-8")
+    first = backups.backup_file(target)
+    target.write_text("dois", encoding="utf-8")
+    second = backups.backup_file(target)
+
+    assert first != second
+    assert (store / first).read_text(encoding="utf-8") == "um"
+    assert (store / second).read_text(encoding="utf-8") == "dois"
+    assert [item["id"] for item in backups.list_backups()] == [second, first]

@@ -37,8 +37,17 @@ def backup_file(target: Path) -> str | None:
         if not target.is_file() or target.stat().st_size > MAX_BACKUP_BYTES:
             return None
 
-        stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
+        base_stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
         relative = _relative_id(target)
+
+        # Dois backups do mesmo arquivo no mesmo milissegundo não podem se sobrescrever.
+        stamp = base_stamp
+        counter = 1
+
+        while (BACKUPS_DIR / stamp / relative).exists():
+            counter += 1
+            stamp = f"{base_stamp}-{counter}"
+
         destination = BACKUPS_DIR / stamp / relative
 
         destination.parent.mkdir(parents=True, exist_ok=True)

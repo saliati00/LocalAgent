@@ -1160,6 +1160,8 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [x] Tools por perfil: grupo base de 8 tools e grupos extras sob demanda (pronto quando: pytest tests/test_tool_profiles.py passa)
 * [x] Busca no código com a tool search_files (pronto quando: pytest tests/test_search_files.py passa)
 * [x] Backup automático antes de sobrescrever arquivos e script de restauração (pronto quando: pytest tests/test_backups.py passa)
+* [x] Aceite executável nas tarefas numeradas: o Harness roda o teste de aceite no lugar do juiz LLM (pronto quando: pytest tests/test_real_log_fixes.py passa)
+* [x] Primeira rodada real medida: velocidade, tokens por segundo e calibração da estimativa de tokens (pronto quando: capítulo 48 da spec registra os números do log de 07/10/2026)
 * [ ] Criar o conjunto de avaliação com 10 a 20 tarefas reais e critério de aceite executável (tarefas 02 e 03 em tarefas/; pronto quando: pytest -m aceite tests/test_aceite_tarefa02.py tests/test_aceite_tarefa03.py passa e o runner imprime a taxa de sucesso)
 * [ ] [humano] Medir no PC alvo o consumo real do prompt e mantê-lo abaixo de 60% da janela (pronto quando: PROMPT_SIZES de 10 tarefas reais mostram est_tokens total menor que 0,6 de NUM_CTX)
 * [ ] [humano] Comparar FAST sozinho, FAST com think, SMART sozinho e cascata com o conjunto de avaliação (pronto quando: a tabela de resultados está registrada em specs/avaliacoes.md)
@@ -1531,7 +1533,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-382 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+404 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1783,3 +1785,27 @@ Implementado:
 * **Resultado medido (estimativa de 3 caracteres por token):** schema do grupo base ~885 tokens (antes ~2,9 mil com todas as tools). Prompt fixo estimado: tarefa numerada ~30% da janela de 8192, tarefa simples ~28% e desenvolvimento ~65%.
 
 Pendências deste capítulo: medir em tarefas reais se o roteamento por palavras-chave erra (uma tool escondida chamada sem argumentos gera uma falha antes de o grupo ser ativado); formato de edição `whole` para arquivos pequenos; comparar com o Aider na avaliação da FASE 11.
+
+
+---
+
+# 48. PRIMEIRA RODADA REAL (log de 06/10/2026, analisado em 07/10)
+
+Primeiro log de execução no PC alvo (Windows, RTX 3070 8 GB, Qwen3 8B no Ollama): 9 execuções, 89 chamadas ao modelo. Números medidos:
+
+* **Velocidade:** média de 61,6 tokens/s na geração (mín 53,3, máx 72,3). Tempo médio por chamada de 4,5 s (máx 15,3 s). O 8B Q4 roda inteiro na GPU e o hardware não é o gargalo.
+* **Tokens reais do prompt:** o Ollama contou ~0,82 do estimado (cerca de 3,65 caracteres por token); a estimativa de `CHARS_PER_TOKEN` foi recalibrada de 3,0 para 3,6. O prompt fixo real ficou entre 1,4 mil e 2,8 mil tokens (17% a 34% da janela de 8192).
+* **Contexto:** um único `CONTEXT_NEAR_LIMIT` (7845 tokens), na tarefa 02, quando o histórico acumulou muitas gravações de arquivos grandes.
+* **Tarefas pequenas:** verificar ferramentas, listar pasta, criar arquivo e pesquisar na web concluíram em 1 chamada de ferramenta cada.
+
+Falhas observadas e correções:
+
+* **O juiz de conclusão por LLM errou.** Na tarefa 02 o agente criou os 6 arquivos pedidos e disse que concluiu; o juiz respondeu que "FORMATO.md não foi criado" (falso). O agente regravou tudo 3 vezes e bateu o limite de 31 iterações. Correção: nas tarefas numeradas o **Harness roda o teste de aceite** (até 3 tentativas, com a saída do teste devolvida ao modelo) e só ele decide; esgotadas as tentativas, termina em `needs_human`.
+* **Regravar o mesmo arquivo contava como progresso**, então o detector de estagnação nunca disparava. Correção: mais de 3 gravações no mesmo caminho na mesma tarefa deixam de contar como progresso.
+* **Tarefa do usuário executada pelo agente.** A tarefa 04 é um roteiro humano, mas o agente a executou por 8 minutos: rodou `verificar.bat` várias vezes e, em duas chamadas, **adotou um SMART no registry sem nenhum benchmark** (a regra exigia só o status "selecionado para benchmark"). Correções: tarefas cujo "Quem faz" é o usuário são recusadas pelo Harness; registrar, selecionar e adotar modelos agora exigem confirmação do usuário.
+* **Tarefa 02 repetida duplicou ids** (arquivos de outra rodada com o mesmo id), e o agente tentou "consertar" trocando um trecho por ele mesmo. Correção: a tarefa agora fixa os nomes dos arquivos (sobrescrever em vez de criar outros).
+* **Código Python com quebra de linha dentro de string** (tarefa 03): a validação de sintaxe recusou o arquivo duas vezes (funcionou), mas o modelo não entendeu o motivo. Correção: a mensagem de erro agora mostra a linha e explica `\n` e as aspas triplas; a tarefa avisa que `replace_in_file` só edita arquivos existentes.
+* **`cat` no Windows:** o modelo tentou `cat` e recebeu um erro genérico. Correção: a mensagem agora aponta `read_file`, `list_directory` e `search_files`.
+* **Ainda não testados na rodada real:** tarefa 01, segurança (confirmação e arquivo protegido), repetição da tarefa 01, `@iniciar-desenvolvimento` e o backup.
+
+Resultado da tarefa 02: duas execuções, nenhuma concluiu (limite de iterações; escalada para um SMART inexistente). Da tarefa 03: o 8B não conseguiu escrever o `runner.py` (dois erros de sintaxe e uma tentativa de editar arquivo inexistente). Isso é coerente com o esperado para o 8B em código; a tarefa 03 deve ser tentada com um SMART.

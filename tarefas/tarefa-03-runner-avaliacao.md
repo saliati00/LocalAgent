@@ -19,7 +19,7 @@ Criar `scripts/eval/runner.py` com três funções puras (sem chamar modelo): ca
 ## Passos
 1. Leia `tests/test_aceite_tarefa03.py` (ele é a especificação).
 2. Crie `scripts/eval/runner.py` com as três funções.
-3. Rode `pytest -m aceite tests/test_aceite_tarefa03.py -q` e corrija até passar.
+3. Responda "concluí". O Harness roda o teste de aceite sozinho; se falhar, ele mostra a saída e você corrige SÓ o que ele aponta.
 4. Registre o progresso (veja abaixo).
 
 ## Pode criar/alterar
@@ -27,6 +27,7 @@ Somente `scripts/eval/runner.py` e `workspace/tarefa-03/`.
 
 ## Não faça
 Não altere os testes. Não chame o modelo dentro do runner. Não use `shell=True`.
+Para CRIAR `scripts/eval/runner.py` use `write_file` (`replace_in_file` só edita arquivos que já existem). Em strings Python, escreva a quebra de linha como `\n` (barra invertida + n); para textos de várias linhas use aspas triplas.
 
 ## Pronto quando
 `pytest -m aceite tests/test_aceite_tarefa03.py -q` passa.

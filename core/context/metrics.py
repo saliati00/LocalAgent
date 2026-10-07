@@ -2,8 +2,9 @@
 
 import json
 
-# Estimativa grosseira para texto em português com tokenizers de LLMs abertos.
-CHARS_PER_TOKEN = 3.0
+# Calibrado com o log real de 07/10/2026 (Qwen3 8B no Ollama): ~3,65 caracteres por token
+# nos prompts do agente. Antes era 3.0, que superestimava em ~20%.
+CHARS_PER_TOKEN = 3.6
 
 
 NEAR_LIMIT_RATIO = 0.95

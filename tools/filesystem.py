@@ -72,7 +72,21 @@ def _python_syntax_error(path: Path, content: str) -> str | None:
     try:
         ast.parse(content)
     except SyntaxError as error:
-        return f"Sintaxe Python inválida na linha {error.lineno}: {error.msg}. O arquivo NÃO foi alterado."
+        message = f"Sintaxe Python inválida na linha {error.lineno}: {error.msg}. O arquivo NÃO foi alterado."
+
+        snippet = " ".join((error.text or "").split())
+
+        if snippet:
+            message += f" Linha: {snippet[:100]}"
+
+        if "unterminated string" in (error.msg or ""):
+            message += (
+                " Dica: dentro de uma string Python, a quebra de linha deve ser escrita como \\n "
+                "(barra invertida + n). Uma quebra de linha real dentro de aspas simples ou duplas "
+                "causa este erro; para texto com várias linhas use aspas triplas."
+            )
+
+        return message
 
     return None
 

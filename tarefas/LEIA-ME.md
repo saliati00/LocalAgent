@@ -15,6 +15,10 @@ O agente carrega o arquivo da tarefa, o seu pedido e o **progresso já salvo** e
 | 04 | Medição no PC | você | instalação | você junta os dados |
 | 05 | Decidir a configuração de modelos | você | 03 e 04 | `specs/avaliacoes.md` |
 
+## Tarefas do agente e tarefas suas
+- **Tarefas 01 a 03 (agente):** quando o agente responde "concluí", o **próprio Harness roda o teste de aceite**. Se falhar, a saída do teste volta para o agente corrigir (até 3 tentativas); se passar, a tarefa termina como concluída; se esgotar as tentativas, ele para pedindo ajuda (`NEEDS_HUMAN`).
+- **Tarefas 04 e 05 (suas):** o agente **recusa** executá-las. São roteiros para você seguir.
+
 ## Como saber se uma tarefa terminou
 Rode o teste de aceite dela (coluna da direita) no Prompt de Comando, dentro da pasta do projeto:
 

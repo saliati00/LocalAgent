@@ -5,7 +5,15 @@ import time
 from pathlib import Path
 from core.paths import PROJECT_ROOT, PROJECT_SPEC_PATH, TASKS_DIR
 from core.prompts import list_prompts, load_prompt
-from core.tasks import TASK_MARKER, build_task_prompt, find_task_number, list_tasks
+from core.tasks import (
+    TASK_MARKER,
+    acceptance_command,
+    build_task_prompt,
+    find_task_number,
+    list_tasks,
+    run_acceptance,
+    task_number_from_prompt,
+)
 import ollama
 
 from core.context.manager import ContextManager
@@ -54,6 +62,9 @@ client = ollama.Client(
 NUM_CTX = 8192
 MAX_ITERATIONS = 30
 MAX_ESCALATIONS = 3
+
+# Tarefas numeradas com teste de aceite: quantas vezes o Harness roda o teste antes de pedir ajuda.
+MAX_ACCEPTANCE_ATTEMPTS = 3
 
 # Descrições do schema de tools enviadas ao modelo (o schema completo continua em TOOLS).
 COMPACT_TOOL_SCHEMA = True
@@ -1032,6 +1043,10 @@ REGRAS:
     smart_progress = False
     escalation_count = 0
 
+    task_number = task_number_from_prompt(prompt)
+    acceptance_args = acceptance_command(task_number) if task_number else None
+    acceptance_attempts = 0
+
     while True:
 
         iteration += 1
@@ -1433,7 +1448,39 @@ REGRAS:
             break
 
         # Avaliação de conclusão rigorosa controlada pelo Harness
-        if state.last_tool_success is False:
+        if acceptance_args is not None:
+            # Tarefa numerada com teste de aceite: quem decide é o teste, não um LLM.
+            passed, acceptance_output = run_acceptance(acceptance_args)
+            acceptance_attempts += 1
+            log(
+                "ACCEPTANCE",
+                f"tentativa {acceptance_attempts}/{MAX_ACCEPTANCE_ATTEMPTS} | {'passou' if passed else 'falhou'}",
+            )
+
+            if passed:
+                completion = {
+                    "status": "complete",
+                    "reason": "O teste de aceite da tarefa passou (verificação executável do Harness).",
+                }
+            elif acceptance_attempts >= MAX_ACCEPTANCE_ATTEMPTS:
+                reason = (
+                    f"A tarefa não passou no teste de aceite depois de {acceptance_attempts} tentativas. "
+                    f"Última saída: {acceptance_output[-400:]}"
+                )
+                state.needs_human(reason)
+                log("NEEDS_HUMAN", reason)
+                print(f"\n[NEEDS_HUMAN] {reason}")
+                break
+            else:
+                completion = {
+                    "status": "continue",
+                    "reason": (
+                        "O teste de aceite FALHOU. Saída (final):\n"
+                        f"{acceptance_output}\n"
+                        "Corrija SOMENTE o que o teste aponta, sem refazer o que já está certo, e responda quando terminar."
+                    ),
+                }
+        elif state.last_tool_success is False:
             # Se for repetição/loop bloqueado consecutivo sem recuperação
             last_err = str(getattr(state, "last_failure_reason", "") or "")
             if consecutive_tool_errors >= 2 and ("bloqueada para evitar loops" in last_err or "loop_blocked" in last_err):
@@ -1496,6 +1543,11 @@ REGRAS:
         )
 
         log("CONTINUE", completion["reason"])
+
+        if acceptance_args is not None:
+            # Mensagem curta: repetir a tarefa inteira a cada tentativa gastaria o contexto.
+            messages.append({"role": "user", "content": completion["reason"]})
+            continue
 
         messages.append({
             "role": "user",

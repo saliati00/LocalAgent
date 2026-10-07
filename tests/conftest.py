@@ -26,3 +26,11 @@ def isolate_log_file(tmp_path, monkeypatch):
 
     monkeypatch.setattr(logger, "LOG_DIR", tmp_path / "logs")
     monkeypatch.setattr(logger, "LOG_FILE", tmp_path / "logs" / "agent.log")
+
+
+@pytest.fixture(autouse=True)
+def no_interactive_model_confirmation(monkeypatch):
+    """Os testes de registry chamam as tools sem terminal; os testes de confirmação ligam de volta."""
+    import tools.manager
+
+    monkeypatch.setattr(tools.manager, "CONFIRM_MODEL_GOVERNANCE", False)

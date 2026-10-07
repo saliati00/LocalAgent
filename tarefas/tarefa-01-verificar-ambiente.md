@@ -19,7 +19,7 @@ Descobrir o que está instalado neste PC e gravar um resumo curto. Serve de prim
 - nvidia-smi: <modelo da placa ou não encontrado>
 - cmake: <versão ou não encontrado>
 ```
-4. Registre o progresso (veja abaixo) e responda com um resumo de 3 linhas.
+4. Registre o progresso (veja abaixo) e responda com um resumo de 3 linhas. O Harness então roda o teste de aceite sozinho.
 
 ## Pode criar/alterar
 Somente `workspace/tarefa-01/`.

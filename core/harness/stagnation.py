@@ -28,6 +28,10 @@ DEFAULT_MAX_REPEATED_QUERIES = 3
 STUCK_SAME_ERROR_REPEATS = 3
 STUCK_ALTERNATING_CYCLES = 6
 
+# Escrever no mesmo arquivo mais vezes que isto, na mesma tarefa, deixa de ser progresso
+# (o log real mostrou o modelo regravando os mesmos 6 arquivos 3 vezes seguidas).
+MAX_PROGRESS_WRITES_PER_PATH = 3
+
 READ_ONLY_TOOLS = {
     "list_directory",
     "read_file",
@@ -101,6 +105,7 @@ class StagnationDetector:
         self.last_state_snapshot: dict | None = None
         self.signatures: list[tuple[str, bool]] = []
         self.stuck_reason: str | None = None
+        self.write_counts: dict[str, int] = {}
 
     @staticmethod
     def _signature(name: str, arguments: dict | None) -> str:
@@ -213,6 +218,14 @@ class StagnationDetector:
 
         # Modificação real de arquivos no sistema
         if name in {"write_file", "replace_in_file", "download_file"}:
+            target = str(arguments.get("path") or arguments.get("destination") or "")
+
+            if target:
+                self.write_counts[target] = self.write_counts.get(target, 0) + 1
+
+                if self.write_counts[target] > MAX_PROGRESS_WRITES_PER_PATH:
+                    return False
+
             return True
 
         # Comandos de terminal

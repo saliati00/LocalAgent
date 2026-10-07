@@ -55,6 +55,10 @@ SYSTEM_CHANGE_COMMANDS = {
 }
 
 
+# Comandos de Linux que não existem no Windows (o modelo costuma tentá-los).
+UNIX_ONLY_COMMANDS = {"cat", "ls", "grep", "head", "tail", "touch", "mkdir", "cp", "mv", "rm", "which", "chmod"}
+
+
 DESTRUCTIVE_COMMANDS = {
     "rm",
     "rmdir",
@@ -332,6 +336,21 @@ def run_command(
         return {
             "success": False,
             "error": "Comando excedeu o limite de 300 segundos.",
+            "tool_error": True,
+        }
+
+    except FileNotFoundError as e:
+        message = str(e)
+
+        if os.name == "nt" and _normalize_executable(parts[0]) in UNIX_ONLY_COMMANDS:
+            message = (
+                f"'{parts[0]}' não existe no Windows. Use read_file (no lugar de cat/head/tail), "
+                "list_directory (no lugar de ls) e search_files (no lugar de grep/find)."
+            )
+
+        return {
+            "success": False,
+            "error": message,
             "tool_error": True,
         }
 

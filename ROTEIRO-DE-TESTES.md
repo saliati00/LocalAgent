@@ -9,6 +9,21 @@ Para quem: **você**, depois de rodar o `instalar.bat`. Tempo: cerca de 1 hora (
 - Quando o agente pedir confirmação: **ENTER** executa, **C** + ENTER cancela. Na dúvida, cancele.
 - Anote o resultado de cada teste na tabela do final.
 
+## Se você já rodou antes (limpeza)
+Na primeira rodada real, o agente chegou a rodar a tarefa 4 (que é sua) e mexeu no registro de modelos. A versão nova passa a recusar essa tarefa e a pedir confirmação nessas ações, mas o que já foi alterado precisa voltar ao normal. Na pasta do projeto:
+
+```
+git checkout -- models/registry.json memory/store.json
+```
+
+E, para a tarefa 2 recomeçar sem arquivos duplicados da rodada anterior (PowerShell):
+
+```
+Remove-Item -Recurse -Force scripts\eval, workspace\tarefa-02 -ErrorAction SilentlyContinue
+```
+
+Depois atualize o projeto com `git pull` (se estiver usando o Git) ou baixe o ZIP de novo.
+
 ## Como abrir o Prompt de Comando na pasta do projeto
 Abra a pasta `LocalAgent` no Explorador de Arquivos, clique na **barra de endereço** (onde aparece o caminho), digite `cmd` e aperte ENTER. Os comandos abaixo funcionam nessa janela.
 
@@ -37,7 +52,7 @@ Faça: abra **`iniciar.bat`** e peça, **uma por vez**, esperando terminar:
 Anote: quanto tempo cada uma levou, se concluiu sozinha, se algum texto saiu com acento ou símbolo quebrado. Na quarta, anote se ele conseguiu pesquisar (se falhar, copie a mensagem de erro).
 
 ## Teste 3 — Tarefa 1 de verdade
-Faça: no agente, digite `dê continuidade à tarefa 1`. Quando terminar, **saia do agente** (ENTER vazio) e rode:
+Faça: no agente, digite `dê continuidade à tarefa 1`. Agora o próprio Harness roda o teste de aceite quando o agente diz que terminou (aparece `ACCEPTANCE` no log). Mesmo assim, **saia do agente** (ENTER vazio) e confirme você mesmo:
 ```
 .venv\Scripts\python -m pytest -m aceite tests/test_aceite_tarefa01.py -q
 ```

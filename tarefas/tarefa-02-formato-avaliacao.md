@@ -2,7 +2,7 @@
 
 Quem faz: agente (o usuário revisa as tarefas de exemplo)
 Pré-requisitos: tarefa 01 (opcional)
-Tamanho: médio (10 a 20 ações)
+Tamanho: médio (6 arquivos)
 
 ## Objetivo
 Definir como cada tarefa de avaliação é escrita e criar 5 exemplos. Depois a tarefa 03 faz o programa que roda e pontua.
@@ -24,28 +24,33 @@ Definir como cada tarefa de avaliação é escrita e criar 5 exemplos. Depois a 
 ```
 - `setup` é opcional (arquivos criados antes de rodar). Caminhos sempre relativos, sem `..`.
 - Tipos de aceite permitidos: `file_exists` (path), `file_contains` (path, text), `command_exit_zero` (command).
+- Cada `id` precisa ser único.
+
+## Arquivos a criar (nomes FIXOS)
+Escreva cada arquivo UMA vez, com EXATAMENTE estes nomes. Se já existirem, sobrescreva o mesmo nome; nunca crie arquivos com outros nomes.
+1. `scripts/eval/FORMATO.md`: explica o formato acima em português, curto.
+2. `scripts/eval/tarefas/tarefa-01.json`: id `arquivo-simples`, criar um arquivo com texto.
+3. `scripts/eval/tarefas/tarefa-02.json`: id `resumo-arquivo`, ler um arquivo do `setup` e gravar um resumo de uma linha.
+4. `scripts/eval/tarefas/tarefa-03.json`: id `contar-arquivos`, listar uma pasta e gravar a contagem.
+5. `scripts/eval/tarefas/tarefa-04.json`: id `script-python`, criar um script Python que imprime um texto (o aceite roda o script).
+6. `scripts/eval/tarefas/tarefa-05.json`: id `verificar-ferramenta`, verificar uma ferramenta com `check_tools` e gravar o resultado.
 
 ## Passos
-1. Crie `scripts/eval/FORMATO.md` explicando o formato acima em português, curto.
-2. Crie 5 tarefas em `scripts/eval/tarefas/`, uma por arquivo, com dificuldades diferentes:
-   - criar um arquivo com texto;
-   - ler um arquivo do `setup` e gravar um resumo de uma linha;
-   - listar uma pasta e gravar a contagem de arquivos;
-   - criar um script Python que imprime um texto (aceite roda o script);
-   - verificar uma ferramenta com `check_tools` e gravar o resultado.
-3. Registre o progresso (veja abaixo) e responda com a lista de tarefas criadas.
+1. Crie os 6 arquivos acima, um por vez, sem reescrevê-los.
+2. Registre o progresso (veja abaixo).
+3. Responda "concluí". O Harness roda o teste de aceite sozinho; se falhar, ele mostra o que faltou e você corrige SÓ aquilo.
 
 ## Pode criar/alterar
 Somente `scripts/eval/` e `workspace/tarefa-02/`.
 
 ## Não faça
-Não crie o programa que roda a avaliação (é a tarefa 03). Não use caminhos absolutos nem `..`.
+Não crie o programa que roda a avaliação (é a tarefa 03). Não use caminhos absolutos nem `..`. Não regrave arquivos que já estão certos.
 
 ## Pronto quando
 `pytest -m aceite tests/test_aceite_tarefa02.py -q` passa.
 
 ## Se travar
-Se o JSON ficar inválido duas vezes seguidas, pare e mostre o erro ao usuário.
+Se o mesmo erro aparecer 2 vezes seguidas, pare e mostre o erro ao usuário.
 
 ## Progresso
 Mantenha `workspace/tarefa-02/progresso.md`: uma linha por passo concluído (`[passo N] feito: ...`). Ao atualizar, releia o arquivo e reescreva-o inteiro com as linhas anteriores.

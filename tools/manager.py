@@ -23,6 +23,7 @@ from core.harness.project_progress import (
 )
 from core.harness.acceptance import check_checklist_acceptance
 
+from core.harness.permissions import request_confirmation
 from core.memory.store import MemoryStore
 from core.paths import PROJECT_SPEC_PATH
 from tools.models import (
@@ -33,6 +34,32 @@ from tools.models import (
 )
 
 PROJECT_SPEC = str(PROJECT_SPEC_PATH)
+
+# Registrar, selecionar para benchmark e ADOTAR modelos muda models/registry.json e a
+# memória. No log real de 07/10/2026 o 8B adotou um SMART sozinho em duas chamadas
+# (sem nenhum benchmark), então estas ações passam a exigir confirmação do usuário.
+CONFIRM_MODEL_GOVERNANCE = True
+
+
+def _needs_user_confirmation(tool_name: str, function):
+    def guarded(**kwargs):
+        if CONFIRM_MODEL_GOVERNANCE:
+            summary = ", ".join(f"{key}={str(value)[:60]}" for key, value in kwargs.items())
+
+            if not request_confirmation(
+                f"{tool_name}({summary})",
+                "O agente quer alterar o Model Registry. Isso só deve acontecer depois de um benchmark seu.",
+            ):
+                return {
+                    "success": False,
+                    "cancelled": True,
+                    "error": "Ação no Model Registry recusada ou cancelada pelo usuário.",
+                    "tool_error": True,
+                }
+
+        return function(**kwargs)
+
+    return guarded
 _memory_store = MemoryStore()
 
 
@@ -148,9 +175,11 @@ TOOLS = {
     "save_memory": save_memory,
     "get_memory": get_memory,
     "get_model_registry": get_model_registry,
-    "register_model_candidate": register_model_candidate,
-    "set_smart_candidate_for_benchmark": set_smart_candidate_for_benchmark,
-    "set_active_smart_model": set_active_smart_model,
+    "register_model_candidate": _needs_user_confirmation("register_model_candidate", register_model_candidate),
+    "set_smart_candidate_for_benchmark": _needs_user_confirmation(
+        "set_smart_candidate_for_benchmark", set_smart_candidate_for_benchmark
+    ),
+    "set_active_smart_model": _needs_user_confirmation("set_active_smart_model", set_active_smart_model),
 }
 
 
