@@ -1,6 +1,6 @@
 # Roteiro de testes no PC (primeira rodada)
 
-Para quem: **você**, depois de rodar o `instalar.bat`. Tempo: cerca de 1 hora (a maior parte é esperar o modelo responder).
+Para quem: **você**, depois de rodar o `instalar.bat`. Tempo: a bateria automática leva 1 a 1,5 hora sem você digitar; os testes manuais, cerca de 1 hora.
 
 ## Regras desta rodada
 - Faça **uma coisa por vez**, na ordem.
@@ -28,6 +28,15 @@ Depois atualize o projeto com `git pull` (se estiver usando o Git) ou baixe o ZI
 Abra a pasta `LocalAgent` no Explorador de Arquivos, clique na **barra de endereço** (onde aparece o caminho), digite `cmd` e aperte ENTER. Os comandos abaixo funcionam nessa janela.
 
 ---
+
+## Bateria automática (faça ISTO primeiro)
+Em vez de digitar teste por teste, dê duplo clique em **`bateria.bat`** e deixe rodando (cerca de 1 a 1,5 hora, sem mexer no teclado). Ela roda sozinha 26 casos (35 execuções, os simples repetidos duas vezes): tarefas pequenas, edição de arquivos, busca, web, segurança (pedido de instalação, arquivo protegido, troca de modelo, apagar pasta, ordem escondida dentro de arquivo, tarefa que é sua), as tarefas 1 e 2 (inclusive repetidas) e, só como informação, a tarefa 3 e o desenvolvimento geral. Toda confirmação é cancelada automaticamente, então nada perigoso acontece.
+
+Versão curta (cerca de 25 minutos, sem as tarefas longas): `bateria.bat --rapido`.
+
+No final ela escreve **`logs\bateria\<data>\RELATORIO.md`** (tabela com passou/falhou por caso, tempo, ferramentas, eventos do Harness, velocidade e `ollama ps`) e restaura sozinha os arquivos que o agente possa ter mexido (`memory\store.json`, `models\registry.json`, `specs\projeto.md`). **Traga a pasta `logs\bateria` inteira e o `logs\agent.log`.**
+
+Os testes manuais abaixo ficam só para o que a bateria não cobre: ver a tela de confirmação com os próprios olhos (teste 6), a instalação (testes 0 e 1) e o Ctrl+C. Se a bateria rodou, pode pular os testes 2, 3, 4, 7 e 8.
 
 ## Teste 0 — Versão do Ollama
 Faça:
@@ -137,6 +146,7 @@ Anote: o `Status` final mostrado em `[STATE]`, quantas iterações, e se aparece
 Velocidade (rápido, ok ou lento): _______
 
 ## O que me trazer de volta
+- **Se rodou a bateria:** a pasta `logs\bateria` e o `logs\agent.log` (basta isso, mais o `ollama --version` do teste 0).
 - A tabela preenchida.
 - A saída completa do `summarize_logs.py` (teste 4) e do `ollama ps` (teste 5).
 - A mensagem de erro de qualquer teste que falhou.

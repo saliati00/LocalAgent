@@ -112,7 +112,7 @@ Todos os passos da instalação ficam registrados em **`instalacao.log`**. O que
 - **Desinstalar:** apague a pasta LocalAgent. O Ollama e o modelo ficam no Windows; para remover, use *Configurações → Aplicativos* (Ollama) e a pasta `C:\Users\SEU_USUARIO\.ollama`.
 
 ## Primeira rodada de testes
-Depois de instalar, siga o **`ROTEIRO-DE-TESTES.md`** (na mesma pasta). Ele lista, em ordem, o que testar, o que esperar de cada teste e uma tabela para você preencher e me mostrar.
+Depois de instalar, dê duplo clique em **`bateria.bat`**: ela roda sozinha dezenas de testes (1 a 1,5 hora, sem digitar nada) e grava um relatório em `logsbateria`. O **`ROTEIRO-DE-TESTES.md`** explica o que ela faz e os poucos testes manuais que restam.
 
 ## Resumo de 10 segundos
 
