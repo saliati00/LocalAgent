@@ -18,7 +18,7 @@ if errorlevel 1 (
     timeout /t 8 /nobreak >nul
 )
 
-echo Isto leva cerca de 30 a 40 minutos (uma bateria por modelo). Deixe rodando e nao mexa no computador.
+echo Isto leva cerca de 40 a 50 minutos (uma bateria por modelo). Deixe rodando e nao mexa no computador.
 echo Versao curta:  comparar.bat --rapido
 echo.
 .venv\Scripts\python.exe scripts\comparar_modelos.py %*

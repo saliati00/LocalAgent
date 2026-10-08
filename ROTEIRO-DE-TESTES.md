@@ -1,6 +1,6 @@
 # Roteiro de testes no PC (primeira rodada)
 
-Para quem: **você**, depois de rodar o `instalar.bat`. Tempo: a bateria automática leva cerca de 30 a 40 minutos sem você digitar (medido na primeira comparação real); os testes manuais, cerca de 1 hora.
+Para quem: **você**, depois de rodar o `instalar.bat`. Tempo: a bateria automática leva cerca de 40 a 50 minutos sem você digitar (medido na primeira comparação real); os testes manuais, cerca de 1 hora.
 
 ## Regras desta rodada
 - Faça **uma coisa por vez**, na ordem.
@@ -30,11 +30,11 @@ Abra a pasta `LocalAgent` no Explorador de Arquivos, clique na **barra de endere
 ---
 
 ## Bateria e comparação de modelos (faça ISTO primeiro)
-Em vez de digitar teste por teste, dê duplo clique em **`comparar.bat`** e deixe rodando. Ele é a única porta de entrada: roda **a mesma bateria automática, sem digitar nada, em cada modelo** (`qwen3:8b`, `qwen3.5:9b` e `qwen3.5:4b`) e no fim mostra a comparação. Leva cerca de 30 a 40 minutos no total (uns 10 minutos por modelo, medido na primeira comparação real).
+Em vez de digitar teste por teste, dê duplo clique em **`comparar.bat`** e deixe rodando. Ele é a única porta de entrada: roda **a mesma bateria automática, sem digitar nada, em cada modelo** (`qwen3:8b`, `qwen3.5:9b` e `qwen3.5:4b`) e no fim mostra a comparação. Leva cerca de 40 a 50 minutos no total (uns 10 minutos por modelo, medido na primeira comparação real).
 
-Antes de começar ele mostra quais modelos faltam e o tamanho do download (cerca de 7 GB o 9b e 3,5 GB o 4b) e **pergunta se pode baixar** (S/N). Depois, para cada modelo: um teste rápido (o modelo responde? chama ferramenta?), a bateria de 26 casos (cerca de 35 execuções, os simples repetidos duas vezes) e a descarga do modelo da placa. Um modelo incompatível é pulado com o motivo anotado, sem derrubar o resto.
+Antes de começar ele mostra quais modelos faltam e o tamanho do download (cerca de 7 GB o 9b e 3,5 GB o 4b) e **pergunta se pode baixar** (S/N). Depois, para cada modelo: um teste rápido (o modelo responde? chama ferramenta?), a bateria de 32 casos (cerca de 47 execuções, os simples e os de raciocínio repetidos duas vezes) e a descarga do modelo da placa. Um modelo incompatível é pulado com o motivo anotado, sem derrubar o resto.
 
-**O que a bateria testa:** tarefas pequenas, edição de arquivos, busca, web, segurança (pedido de instalação, arquivo protegido, troca de modelo, apagar pasta, ordem escondida dentro de arquivo, tarefa que é sua), as tarefas 1 e 2 (inclusive repetidas) e, só como informação, a tarefa 3 e o desenvolvimento geral. Toda confirmação é cancelada automaticamente, então nada perigoso acontece. Os arquivos que o agente possa ter mexido (`memory\store.json`, `models\registry.json`, `specs\projeto.md`) são restaurados sozinhos.
+**O que a bateria testa:** tarefas pequenas, edição de arquivos, busca, web, raciocínio (contas, regras e extração de valores), segurança (pedido de instalação, arquivo protegido, troca de modelo, apagar pasta, ordem escondida dentro de arquivo, tarefa que é sua), as tarefas 1 e 2 (inclusive repetidas) e, só como informação, a tarefa 3 e o desenvolvimento geral. Toda confirmação é cancelada automaticamente, então nada perigoso acontece. Os arquivos que o agente possa ter mexido (`memory\store.json`, `models\registry.json`, `specs\projeto.md`) são restaurados sozinhos.
 
 **No fim:** o terminal mostra uma **tabela de visão geral** (um modelo por linha: casos ok e falhos, erros de ferramenta, tokens de entrada e saída, tokens/s e minutos), e o relatório completo fica em **`logs\comparacao\<data>\COMPARATIVO.md`**, com aprovação por grupo e caso a caso, eventos do Harness e o `ollama ps` de cada modelo (para ver se coube na placa). **Traga a pasta `logs\comparacao` inteira e o `logs\agent.log`.**
 

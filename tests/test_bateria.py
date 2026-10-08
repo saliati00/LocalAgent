@@ -150,3 +150,56 @@ def test_report_summarizes_groups_violations_and_info(sandbox):
     assert "| simples | 1 | 2 |" in report
     assert "INFO" in report and "LOOP_BLOCKED: 4" in report
     assert "memory/store.json" in report and "60.0 tokens/s" in report
+
+
+# ---------------------------------------------------------
+# Casos de raciocínio
+# ---------------------------------------------------------
+
+def test_reasoning_cases_exist_and_expected_answers_are_correct():
+    ids = {item[0] for item in bateria.REASONING}
+
+    assert len(ids) == 6
+    assert {c["id"] for c in bateria.CASES if c["group"] == "raciocinio"} == ids
+
+    answers = {item[0]: item[4] for item in bateria.REASONING}
+
+    assert answers["soma-tres"] == 123 + 456 + 89
+    assert answers["conta-dois-passos"] == 12 * 7 - 9
+    assert answers["regra-do-desconto"] == 200 * (1 - 0.15)
+    assert answers["maior-valor"] == max(21, 34, 29, 31)
+    assert answers["contar-erros"] == 3
+    assert answers["multiplicar-dois-arquivos"] == 15 * 27
+
+
+def test_reasoning_setup_files_support_the_expected_answers():
+    log = next(item for item in bateria.REASONING if item[0] == "contar-erros")[2]
+
+    assert next(iter(log.values())).count("ERRO") == 3
+
+
+@pytest.mark.parametrize("written,ok", [("75", True), ("75.0", True), ("Total: 75", True), ("75,00\n", True),
+                                        ("12*7-9=75", False), ("74", False), ("", False), ("setenta e cinco", False)])
+def test_number_check_accepts_only_the_exact_value(sandbox, written, ok):
+    (sandbox / "r.txt").write_text(written, encoding="utf-8")
+
+    assert bateria.number_is("r.txt", 75)[0] is ok
+
+
+def test_number_check_reports_a_missing_file(sandbox):
+    ok, detail = bateria.number_is("nao-existe.txt", 1)
+
+    assert ok is False and "não foi criado" in detail
+
+
+def test_each_reasoning_case_passes_with_its_answer_and_fails_with_a_wrong_one(sandbox):
+    for case_id, _prompt, _setup, output, expected in bateria.REASONING:
+        case = next(c for c in bateria.CASES if c["id"] == case_id)
+        target = sandbox / output
+        target.parent.mkdir(parents=True, exist_ok=True)
+
+        target.write_text(str(expected), encoding="utf-8")
+        assert case["check"](ctx())[0] is True, case_id
+
+        target.write_text(str(expected + 1), encoding="utf-8")
+        assert case["check"](ctx())[0] is False, case_id

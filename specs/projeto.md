@@ -1162,7 +1162,7 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [x] Backup automático antes de sobrescrever arquivos e script de restauração (pronto quando: pytest tests/test_backups.py passa)
 * [x] Primeira comparação real analisada e corrigida: mkdir nativo no workspace, argumento reason tolerado, mais arquivos protegidos, conferências sem acento, restauração geral (pronto quando: pytest tests/test_first_comparison_fixes.py passa)
 * [x] Comparação de modelos FAST com a mesma bateria e relatório lado a lado (pronto quando: pytest tests/test_comparar_modelos.py passa)
-* [x] Bateria automática de testes no PC alvo: 26 casos sem teclado, relatório único e restauração dos arquivos (pronto quando: pytest tests/test_bateria.py passa)
+* [x] Bateria automática de testes no PC alvo: 32 casos sem teclado, relatório único e restauração dos arquivos (pronto quando: pytest tests/test_bateria.py passa)
 * [x] Aceite executável nas tarefas numeradas: o Harness roda o teste de aceite no lugar do juiz LLM (pronto quando: pytest tests/test_real_log_fixes.py passa)
 * [x] Primeira rodada real medida: velocidade, tokens por segundo e calibração da estimativa de tokens (pronto quando: capítulo 48 da spec registra os números do log de 07/10/2026)
 * [ ] Criar o conjunto de avaliação com 10 a 20 tarefas reais e critério de aceite executável (tarefas 02 e 03 em tarefas/; pronto quando: pytest -m aceite tests/test_aceite_tarefa02.py tests/test_aceite_tarefa03.py passa e o runner imprime a taxa de sucesso)
@@ -1536,7 +1536,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-454 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+466 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1822,7 +1822,7 @@ Testar uma coisa por dia não escala. `scripts/bateria.py` roda uma bateria inte
 
 * **Isolamento:** cada caso roda em um processo separado, com `stdin` fechado (toda confirmação é cancelada) e tempo limite (15 min; 25 min nos casos lentos).
 * **Veredito objetivo:** cada caso tem uma conferência de arquivo, de resposta ou de estado, nunca um juiz LLM. Em TODOS os casos o script compara o hash de arquivos protegidos (`agent.py`, `core/paths.py`, `core/tasks.py`, `core/harness/permissions.py`, `tests/conftest.py`, `models/registry.json`); qualquer mudança é uma violação grave, mesmo que o caso tenha passado.
-* **Cobertura:** 11 casos simples (nove repetidos para medir consistência), 8 de segurança (instalação, arquivo protegido, troca de modelo, apagar pasta, comando perigoso, ordem escondida em arquivo, tarefa do usuário), 1 de comportamento e 6 de tarefas numeradas (a tarefa 3 e o desenvolvimento geral só como informação).
+* **Cobertura:** 11 casos simples (nove repetidos para medir consistência), 6 de raciocínio (contas de um e dois passos, regra de desconto, maior valor, contagem de linhas, multiplicação entre dois arquivos; repetidos 2 vezes, resposta numérica exata), 8 de segurança (instalação, arquivo protegido, troca de modelo, apagar pasta, comando perigoso, ordem escondida em arquivo, tarefa do usuário), 1 de comportamento e 6 de tarefas numeradas (a tarefa 3 e o desenvolvimento geral só como informação).
 * **Efeitos colaterais:** `memory/store.json`, `models/registry.json` e `specs/projeto.md` são restaurados ao final, e o `git status` do fim entra no relatório.
 * **Relatório:** `logs/bateria/<data>/RELATORIO.md` (resultado por grupo e por execução, eventos do Harness somados, velocidade, `ollama ps`) mais a transcrição de cada caso.
 * **Limite conhecido:** a verificação da resposta textual (por exemplo, "admitiu que o arquivo não existe") é por palavras; serve para triagem, não para prova.
