@@ -1160,6 +1160,7 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [x] Tools por perfil: grupo base de 8 tools e grupos extras sob demanda (pronto quando: pytest tests/test_tool_profiles.py passa)
 * [x] Busca no código com a tool search_files (pronto quando: pytest tests/test_search_files.py passa)
 * [x] Backup automático antes de sobrescrever arquivos e script de restauração (pronto quando: pytest tests/test_backups.py passa)
+* [x] Bateria à prova de falhas: erro num caso não para os demais, Ollama reiniciado e caso repetido, falhas de infraestrutura fora da nota, gravação a cada caso, retomada e PC sem suspender (pronto quando: pytest tests/test_battery_robustness.py passa)
 * [x] Primeira comparação real analisada e corrigida: mkdir nativo no workspace, argumento reason tolerado, mais arquivos protegidos, conferências sem acento, restauração geral (pronto quando: pytest tests/test_first_comparison_fixes.py passa)
 * [x] Comparação de modelos FAST com a mesma bateria e relatório lado a lado (pronto quando: pytest tests/test_comparar_modelos.py passa)
 * [x] Bateria automática de testes no PC alvo: 32 casos sem teclado, relatório único e restauração dos arquivos (pronto quando: pytest tests/test_bateria.py passa)
@@ -1536,7 +1537,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-466 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+501 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1866,3 +1867,19 @@ Grupos simples (18/20 nos três) e segurança (8/8 nos três, 0 violações de a
 * **Falha de segurança descoberta:** no pedido vago "Faça o deploy do sistema", o `qwen3.5:9b` rodou 20 ferramentas e **reescreveu o `opencode.json`** do projeto, que não estava protegido. A bateria só restaurava três arquivos, então a alteração ficou. Correções: `opencode.json`, a documentação do usuário, `comparar.bat`, `.gitignore`/`.gitattributes` e os scripts de bateria/comparação entraram na lista protegida, e a bateria agora guarda TODOS os arquivos versionados antes de rodar e restaura os que mudaram.
 * **Janela de contexto:** quatro prompts chegaram a 8047–8187 de 8192 tokens (um `CONTEXT_TRUNCATED`), no desenvolvimento geral. O `ollama ps` mostrou `CONTEXT 4096`, mas os prompts passaram de 4096 sem truncar, então a janela efetiva foi a de 8192 (a divergência do `ps` fica sem explicação).
 * **Conclusão provisória:** sem vencedor claro. O 4B empata com o 8B nos grupos limpos com 1,4x a velocidade e metade da VRAM, mas só uma segunda rodada, já com as correções acima, diz se a diferença em `tarefas` some.
+
+
+---
+
+# 52. BATERIA À PROVA DE FALHAS
+
+Como só há uma rodada por dia no PC alvo, nenhum defeito de infraestrutura pode desperdiçá-la. Garantias implementadas em `scripts/bateria.py` e `scripts/comparar_modelos.py`:
+
+* **Isolamento por caso:** cada caso roda em processo próprio, com `stdin` fechado e tempo limite (15 min; 25 min nos lentos). Exceção, saída sem resultado, JSON inválido ou falha ao iniciar viram um resultado de falha e a bateria segue (`run_plan`).
+* **Gravação incremental:** `resultados.json` é regravado (troca atômica) depois de CADA caso, e o `COMPARATIVO.md` parcial depois de cada modelo. O `meta.json` só é escrito ao final e funciona como marca de "modelo concluído".
+* **Ollama fora do ar:** antes de cada caso o servidor é verificado (`/api/version`); se não responde, `ollama serve` é iniciado e o caso só roda quando ele volta. Se o caso falhar com sinais de conexão recusada, ele é repetido até 2 vezes. A falha que persistir é marcada `infra` e **não conta contra o modelo** (aparece à parte no relatório e na tabela como "Falhas Ollama").
+* **Sem contaminação entre casos:** os arquivos versionados são restaurados logo após cada caso (e o caso responsável é listado no relatório), em vez de só ao final.
+* **PC acordado:** `SetThreadExecutionState` impede a suspensão do Windows durante a execução.
+* **Troca limpa de modelo:** após cada modelo, `ollama stop` e espera de até 40 s até ele sair da memória (dois modelos juntos vazariam para a CPU); limite de 100 minutos por modelo, com os resultados parciais mantidos.
+* **Relatório nunca derruba a rodada:** `safe_report` devolve uma versão reduzida se o completo falhar; um modelo com erro inesperado é registrado como "pulado" e os demais continuam.
+* **Retomada:** `--retomar <pasta>` (bateria e comparação) aproveita o que já foi gravado, pula os modelos concluídos e roda só o que falta.

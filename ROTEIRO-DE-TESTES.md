@@ -45,6 +45,14 @@ Opções (todas opcionais):
 
 Para trocar de modelo só numa execução (sem mexer no registro), o projeto lê a variável `LOCALAGENT_FAST_MODEL`.
 
+**À prova de falhas:** um caso que falha, trava ou dá erro **não interrompe os demais**. Cada caso roda isolado e com tempo limite; o resultado de cada um é gravado em disco na hora; se o Ollama cair no meio, a bateria tenta subi-lo de novo e repete o caso (a falha que sobrar é marcada como "de infraestrutura" e **não conta contra o modelo**); arquivos versionados que o agente alterar são restaurados **logo depois do caso**, para não contaminar os seguintes; e o Windows é impedido de suspender o PC enquanto roda. Cada modelo tem um limite de 100 minutos.
+
+**Se mesmo assim algo parar** (queda de luz, PC reiniciado, janela fechada): rode de novo com a mesma pasta e ele aproveita tudo que já foi feito.
+
+```
+comparar.bat --retomar logs\comparacao\NOME_DA_PASTA
+```
+
 Os testes manuais abaixo ficam só para o que a bateria não cobre: ver a tela de confirmação com os próprios olhos (teste 6), a instalação (testes 0 e 1) e o Ctrl+C. Faça o teste 6 **antes** de iniciar o `comparar.bat`, com nada rodando.
 
 ## Teste 0 — Versão do Ollama

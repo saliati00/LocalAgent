@@ -24,6 +24,7 @@ import subprocess
 import sys
 import time
 import unicodedata
+import urllib.request
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -50,6 +51,14 @@ PROTECTED = [
 SNAPSHOT_MAX_BYTES = 2_000_000
 
 DEFAULT_TIMEOUT = 900
+OLLAMA_VERSION_URL = "http://localhost:11434/api/version"
+OLLAMA_WAIT_SECONDS = 90
+MAX_INFRA_RETRIES = 2
+# Sinais de que o servidor do Ollama caiu no meio do caso (falha de infraestrutura, não do modelo).
+INFRA_PATTERNS = re.compile(
+    r"Connection refused|ConnectError|Failed to connect|actively refused|10061|ConnectionError|RemoteProtocolError|Server disconnected",
+    re.IGNORECASE,
+)
 SLOW_TIMEOUT = 1500
 TOKENS_LINE = re.compile(r"TOKENS \| input=(\d+) \| output=(\d+)")
 NO_ANSWER = re.compile(
@@ -458,10 +467,59 @@ def run_cmd(args: list[str]) -> str:
         return f"(falhou: {exc})"
 
 
-def run_in_child(case_def: dict, attempt: int, folder: Path) -> dict:
+def failure_result(case_def: dict, detail: str, status: str, seconds: float = 0.0, infra: bool = False) -> dict:
+    """Resultado de um caso que não chegou a produzir veredito (todas as chaves presentes)."""
+
+    return {
+        "id": case_def["id"], "passed": False, "detail": detail, "status": status, "seconds": round(seconds, 1),
+        "tools": 0, "failed_tools": 0, "events": {}, "model_calls": 0, "tokens_in": 0, "tokens_out": 0,
+        "tok_s": None, "violations": [], "infra": infra,
+    }
+
+
+def ollama_alive(timeout: float = 5) -> bool:
+    try:
+        with urllib.request.urlopen(OLLAMA_VERSION_URL, timeout=timeout) as response:
+            return response.status == 200
+    except Exception:  # noqa: BLE001 - qualquer falha de rede significa "não está respondendo"
+        return False
+
+
+def ensure_ollama(wait_seconds: int = OLLAMA_WAIT_SECONDS) -> bool:
+    """Garante que o servidor do Ollama responde; se não, tenta subi-lo e espera."""
+
+    if ollama_alive():
+        return True
+
+    try:
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+        subprocess.Popen(["ollama", "serve"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, creationflags=flags)
+    except OSError:
+        return False
+
+    deadline = time.time() + wait_seconds
+
+    while time.time() < deadline:
+        if ollama_alive():
+            return True
+
+        time.sleep(3)
+
+    return False
+
+
+def run_in_child_once(case_def: dict, attempt: int, folder: Path) -> dict:
     limit = SLOW_TIMEOUT if case_def["slow"] else DEFAULT_TIMEOUT
     env = {**os.environ, "PYTHONUTF8": "1"}
     started = time.time()
+    transcript = folder / f"{case_def['id']}-{attempt}.txt"
+
+    def save(text: str) -> None:
+        try:
+            transcript.write_text(text, encoding="utf-8")
+        except OSError:
+            pass
 
     try:
         done = subprocess.run(
@@ -469,23 +527,153 @@ def run_in_child(case_def: dict, attempt: int, folder: Path) -> dict:
             stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=limit, env=env, cwd=str(ROOT),
         )
-        output = done.stdout + done.stderr
+        output = (done.stdout or "") + (done.stderr or "")
     except subprocess.TimeoutExpired as exc:
-        output = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
-        (folder / f"{case_def['id']}-{attempt}.txt").write_text(output, encoding="utf-8")
-        return {"id": case_def["id"], "passed": False, "detail": f"estourou o tempo limite de {limit} s",
-                "status": "timeout", "seconds": float(limit), "tools": 0, "failed_tools": 0, "events": {},
-                "model_calls": 0, "tok_s": None, "violations": []}
+        partial = exc.stdout if isinstance(exc.stdout, str) else ""
+        save(partial)
+        return failure_result(case_def, f"estourou o tempo limite de {limit} s", "timeout", limit)
+    except OSError as exc:
+        return failure_result(case_def, f"não consegui iniciar o caso: {exc}", "erro-interno", time.time() - started)
 
-    (folder / f"{case_def['id']}-{attempt}.txt").write_text(output, encoding="utf-8")
+    save(output)
 
     for line in reversed(output.splitlines()):
         if line.startswith(RESULT_MARK):
-            return json.loads(line[len(RESULT_MARK):])
+            try:
+                result = json.loads(line[len(RESULT_MARK):])
+            except ValueError:
+                break
 
-    return {"id": case_def["id"], "passed": False, "detail": "o caso não devolveu resultado (ver a transcrição)",
-            "status": "sem-resultado", "seconds": round(time.time() - started, 1), "tools": 0, "failed_tools": 0,
-            "events": {}, "model_calls": 0, "tok_s": None, "violations": []}
+            result.setdefault("infra", False)
+
+            if not result.get("passed") and INFRA_PATTERNS.search(output):
+                result["infra"] = True
+
+            return result
+
+    result = failure_result(case_def, "o caso não devolveu resultado (ver a transcrição)", "sem-resultado", time.time() - started)
+    result["infra"] = bool(INFRA_PATTERNS.search(output))
+
+    return result
+
+
+def run_in_child(case_def: dict, attempt: int, folder: Path, runner=None, ensure=None, retries: int = MAX_INFRA_RETRIES) -> dict:
+    """
+    Roda um caso. Se o Ollama estiver fora do ar (antes ou durante o caso), tenta subi-lo e repete o
+    caso, até `retries` vezes; uma falha que persista é marcada como de infraestrutura e não conta contra o modelo.
+    """
+
+    runner = runner or run_in_child_once
+    ensure = ensure or ensure_ollama
+    result = None
+
+    for retry in range(retries + 1):
+        if not ensure():
+            result = failure_result(case_def, "Ollama indisponível (não voltou a responder)", "infra", infra=True)
+            continue
+
+        result = runner(case_def, attempt, folder)
+
+        if result.get("passed") or not result.get("infra"):
+            break
+
+    if result.get("infra") and not result.get("passed"):
+        result["detail"] = "FALHA DE INFRA (não conta contra o modelo): " + result["detail"]
+
+    return result
+
+
+def save_results(folder: Path, results: list[dict]) -> None:
+    """Grava resultados.json depois de CADA caso (troca atômica): uma queda não perde o que já rodou."""
+
+    target = folder / "resultados.json"
+    temporary = folder / "resultados.json.tmp"
+
+    try:
+        temporary.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(temporary, target)
+    except OSError:
+        pass
+
+
+def load_results(folder: Path) -> list[dict]:
+    try:
+        data = json.loads((folder / "resultados.json").read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def verdict_text(result: dict, info: bool) -> str:
+    if result.get("infra") and not result.get("passed"):
+        return "INFRA"
+
+    return "INFO" if info else ("passou" if result.get("passed") else "FALHOU")
+
+
+def run_plan(plan, folder: Path, results: list[dict], runner=None, restore=None, say=print) -> None:
+    """
+    Executa os casos em ordem. Nenhum erro de UM caso interrompe os demais: exceções viram um
+    resultado de falha, e cada resultado é gravado em disco assim que sai.
+    """
+
+    runner = runner or run_in_child
+    total = len(plan)
+
+    for index, (case_def, attempt) in enumerate(plan, 1):
+        if any(r.get("id") == case_def["id"] and r.get("attempt") == attempt for r in results):
+            continue
+
+        say(f"[{index}/{total}] {case_def['id']} (rodada {attempt}) ... ", end="", flush=True)
+
+        try:
+            result = runner(case_def, attempt, folder)
+        except Exception as exc:  # noqa: BLE001 - o erro de um caso não pode derrubar a bateria
+            result = failure_result(case_def, f"erro interno da bateria: {type(exc).__name__}: {exc}", "erro-interno")
+
+        result.update(attempt=attempt, group=case_def["group"], info=case_def["info"])
+
+        # Restaura já: um arquivo versionado alterado por este caso não pode contaminar os próximos.
+        result["tracked_changed"] = []
+
+        if restore is not None:
+            try:
+                result["tracked_changed"] = restore()
+            except Exception:  # noqa: BLE001
+                pass
+
+        results.append(result)
+        save_results(folder, results)
+
+        note = f" [alterou arquivos versionados: {', '.join(result['tracked_changed'])}]" if result["tracked_changed"] else ""
+        say(f"{verdict_text(result, case_def['info'])} ({result.get('seconds', 0)} s) {str(result.get('detail', ''))[:90]}{note}")
+
+
+@contextlib.contextmanager
+def keep_awake():
+    """Impede o Windows de suspender o PC enquanto a bateria roda (a tela pode apagar)."""
+
+    if os.name != "nt":
+        yield
+        return
+
+    import ctypes
+
+    ES_CONTINUOUS = 0x80000000
+    ES_SYSTEM_REQUIRED = 0x00000001
+
+    try:
+        ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
+    except Exception:  # noqa: BLE001
+        pass
+
+    try:
+        yield
+    finally:
+        try:
+            ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def select_cases(args) -> list[dict]:
@@ -506,7 +694,8 @@ def select_cases(args) -> list[dict]:
 
 
 def build_report(results: list[dict], meta: dict) -> str:
-    counted = [r for r in results if not r["info"]]
+    counted = [r for r in results if not r.get("info") and not r.get("infra")]
+    infra = [r for r in results if r.get("infra") and not r.get("passed")]
     passed = sum(1 for r in counted if r["passed"])
     lines = [
         "# Relatório da bateria",
@@ -516,12 +705,20 @@ def build_report(results: list[dict], meta: dict) -> str:
         f"- Ollama: {meta['ollama_version']}",
         f"- Duração total: {meta['minutes']} min",
         f"- **Resultado: {passed} de {len(counted)} execuções passaram** ({round(100 * passed / len(counted)) if counted else 0}%)",
+        f"- Falhas de infraestrutura (Ollama fora do ar; não contam contra o modelo): {len(infra)}",
         "",
     ]
 
-    if any(r["violations"] for r in results):
+    changed = [r for r in results if r.get("tracked_changed")]
+
+    if changed:
+        lines += ["## Casos que alteraram arquivos versionados (restaurados na hora)", ""]
+        lines += [f"- {r['id']}: {', '.join(r['tracked_changed'])}" for r in changed]
+        lines.append("")
+
+    if any(r.get("violations") for r in results):
         lines += ["## ATENÇÃO: violações de arquivos protegidos", ""]
-        lines += [f"- {r['id']}: {', '.join(r['violations'])}" for r in results if r["violations"]]
+        lines += [f"- {r['id']}: {', '.join(r['violations'])}" for r in results if r.get("violations")]
         lines.append("")
 
     lines += ["## Por grupo", "", "| Grupo | Passou | Total |", "|---|---|---|"]
@@ -533,7 +730,7 @@ def build_report(results: list[dict], meta: dict) -> str:
     lines += ["", "## Execuções", "", "| Caso | Rodada | Resultado | Tempo (s) | Status | Ferramentas (falhas) | Observação |", "|---|---|---|---|---|---|---|"]
 
     for r in results:
-        verdict = "INFO" if r["info"] else ("passou" if r["passed"] else "FALHOU")
+        verdict = verdict_text(r, r.get("info"))
         lines.append(
             f"| {r['id']} | {r['attempt']} | {verdict} | {r['seconds']} | {r['status']} | {r['tools']} ({r['failed_tools']}) | {r['detail'][:110]} |"
         )
@@ -564,6 +761,18 @@ def build_report(results: list[dict], meta: dict) -> str:
     return "\n".join(lines)
 
 
+def safe_report(results: list[dict], meta: dict) -> str:
+    """O relatório completo nunca deve derrubar a bateria: no pior caso, sai uma versão reduzida."""
+
+    try:
+        return build_report(results, meta)
+    except Exception as exc:  # noqa: BLE001
+        lines = ["# Relatório da bateria (versão reduzida)", "",
+                 f"Não consegui montar o relatório completo: {type(exc).__name__}: {exc}. Os dados estão em resultados.json.", ""]
+        lines += [f"- {r.get('id')} (rodada {r.get('attempt', 1)}): {'passou' if r.get('passed') else 'FALHOU'} - {str(r.get('detail', ''))[:100]}" for r in results]
+        return "\n".join(lines) + "\n"
+
+
 def orchestrate(args) -> int:
     from core.console import ensure_utf8_console
 
@@ -588,25 +797,25 @@ def orchestrate(args) -> int:
         repeats = args.repeticoes if case_def["repeat"] > 1 else 1
         plan += [(case_def, n + 1) for n in range(repeats)]
 
+    results: list[dict] = load_results(folder) if args.retomar else []
+
+    if results:
+        print(f"Retomando: {len(results)} execuções já feitas serão aproveitadas.")
+
     print(f"Bateria: {len(plan)} execuções. Relatório em: {folder}")
     print("Pode deixar rodando; nada exige o teclado. (Ctrl+C interrompe e ainda gera o relatório.)\n")
 
-    results: list[dict] = []
     ollama_ps = "(não coletado)"
     began = time.time()
 
     try:
-        for index, (case_def, attempt) in enumerate(plan, 1):
-            print(f"[{index}/{len(plan)}] {case_def['id']} (rodada {attempt}) ... ", end="", flush=True)
-            result = run_in_child(case_def, attempt, folder)
-            result.update(attempt=attempt, group=case_def["group"], info=case_def["info"])
-            results.append(result)
-            print(("INFO" if case_def["info"] else ("passou" if result["passed"] else "FALHOU")) + f" ({result['seconds']} s) {result['detail'][:90]}")
-
-            if ollama_ps == "(não coletado)" and result["model_calls"]:
-                ollama_ps = run_cmd(["ollama", "ps"])
+        with keep_awake():
+            run_plan(plan, folder, results, restore=lambda: restore_changed(backups))
     except KeyboardInterrupt:
         print("\nInterrompido. Gerando o relatório do que foi feito.")
+
+    if any(r.get("model_calls") for r in results):
+        ollama_ps = run_cmd(["ollama", "ps"])
 
     restored = restore_changed(backups)
 
@@ -620,10 +829,10 @@ def orchestrate(args) -> int:
         "git_status": run_cmd(["git", "-C", str(ROOT), "status", "--short"]),
     }
 
-    report = build_report(results, meta)
-    (folder / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    report = safe_report(results, meta)
+    save_results(folder, results)
     (folder / "RELATORIO.md").write_text(report, encoding="utf-8")
-    (folder / "resultados.json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
+    (folder / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
     print("\n" + report)
     print(f"\nTraga de volta a pasta: {folder}\n(e o arquivo logs\\agent.log)")
@@ -638,6 +847,7 @@ def main(argv=None) -> int:
     parser.add_argument("--so", help="ids separados por vírgula")
     parser.add_argument("--repeticoes", type=int, default=2, help="rodadas dos casos simples (padrão 2)")
     parser.add_argument("--saida", help="pasta de saída do relatório (padrão: logs/bateria/<data>)")
+    parser.add_argument("--retomar", action="store_true", help="aproveita o que já está em --saida e roda só o que falta")
     parser.add_argument("--run-case", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 

@@ -23,12 +23,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 DEFAULT_MODELS = ["qwen3:8b", "qwen3.5:9b", "qwen3.5:4b"]
 BASE_LABEL = "qwen3:8b"
 APPROX_DOWNLOAD_GB = {"qwen3:8b": 5.2, "qwen3.5:9b": 7.0, "qwen3.5:4b": 3.5}
 MIN_ACCEPTABLE_TOK_S = 15
 SMOKE_TIMEOUT_SECONDS = 180
+MODEL_TIME_LIMIT_SECONDS = 6000
+UNLOAD_WAIT_SECONDS = 40
 
 PING_TOOL = {
     "type": "function",
@@ -105,16 +108,23 @@ def collect(folder: Path, label: str | None = None) -> dict | None:
     if not results_file.exists():
         return None
 
-    results = json.loads(results_file.read_text(encoding="utf-8"))
-    meta_file = folder / "meta.json"
-    meta = json.loads(meta_file.read_text(encoding="utf-8")) if meta_file.exists() else {}
+    try:
+        results = json.loads(results_file.read_text(encoding="utf-8"))
+        meta_file = folder / "meta.json"
+        meta = json.loads(meta_file.read_text(encoding="utf-8")) if meta_file.exists() else {}
+    except (OSError, ValueError):
+        return None
+
+    if not isinstance(results, list):
+        return None
 
     return {"label": label or meta.get("model") or folder.name, "results": results, "meta": meta}
 
 
 def summarize_model(entry: dict) -> dict:
     results = entry["results"]
-    counted = [r for r in results if not r.get("info")]
+    counted = [r for r in results if not r.get("info") and not r.get("infra")]
+    infra = sum(1 for r in results if r.get("infra") and not r.get("passed"))
     passed = sum(1 for r in counted if r["passed"])
     speeds = [r["tok_s"] for r in results if r.get("tok_s")]
     events: dict[str, int] = {}
@@ -145,6 +155,7 @@ def summarize_model(entry: dict) -> dict:
         "tools": sum(r["tools"] for r in results),
         "failed_tools": sum(r["failed_tools"] for r in results),
         "violations": sum(1 for r in results if r.get("violations")),
+        "infra": infra,
         "events": events,
         "groups": {name: tuple(values) for name, values in groups.items()},
         "ollama_ps": entry["meta"].get("ollama_ps", "n/d"),
@@ -178,12 +189,12 @@ def case_cells(entries: list[dict]) -> dict[str, dict[str, str]]:
 def cli_table(summaries: list[dict]) -> str:
     """Tabela de texto puro para o terminal: um modelo por linha, os números que importam."""
 
-    headers = ["Modelo", "Casos ok", "%", "Casos falhos", "Erros de ferramenta", "Tokens entrada", "Tokens saída", "tok/s", "Minutos"]
+    headers = ["Modelo", "Casos ok", "%", "Casos falhos", "Erros de ferramenta", "Tokens entrada", "Tokens saída", "tok/s", "Minutos", "Falhas Ollama"]
     rows = []
 
     for s in summaries:
         if s["skipped"]:
-            rows.append([s["label"], "NÃO RODOU", "-", "-", "-", "-", "-", "-", "-"])
+            rows.append([s["label"], "NÃO RODOU", "-", "-", "-", "-", "-", "-", "-", "-"])
             continue
 
         def number(value):
@@ -191,7 +202,7 @@ def cli_table(summaries: list[dict]) -> str:
 
         rows.append([
             s["label"], f"{s['passed']}/{s['total']}", f"{s['rate']}%", str(s["total"] - s["passed"]), str(s["failed_tools"]),
-            number(s["tokens_in"]), number(s["tokens_out"]), "n/d" if s["avg_tok_s"] is None else str(s["avg_tok_s"]), str(s["minutes"]),
+            number(s["tokens_in"]), number(s["tokens_out"]), "n/d" if s["avg_tok_s"] is None else str(s["avg_tok_s"]), str(s["minutes"]), str(s["infra"]),
         ])
 
     widths = [max(len(row[i]) for row in [headers] + rows) for i in range(len(headers))]
@@ -292,18 +303,65 @@ def confirm_downloads(missing: list[str], assume_yes: bool) -> bool:
         return False
 
 
-def run_one(model: str, folder: Path, args) -> None:
+def wait_unloaded(model: str, seconds: int = UNLOAD_WAIT_SECONDS) -> bool:
+    """Espera o modelo sair da memória (dois modelos juntos não cabem nos 8 GB e vazariam para a CPU)."""
+
+    deadline = time.time() + seconds
+
+    while time.time() < deadline:
+        _, listing = run_cmd(["ollama", "ps"])
+
+        if model.lower() not in listing.lower():
+            return True
+
+        time.sleep(2)
+
+    return False
+
+
+def run_one(model: str, folder: Path, args, resume: bool = False) -> bool:
+    """Roda a bateria de um modelo. Devolve False se estourou o tempo (os resultados parciais ficam em disco)."""
+
     command = [sys.executable, str(ROOT / "scripts" / "bateria.py"), "--saida", str(folder), "--repeticoes", str(args.repeticoes)]
 
     if args.rapido:
         command.append("--rapido")
 
+    if resume:
+        command.append("--retomar")
+
     env = {**os.environ, "LOCALAGENT_FAST_MODEL": model, "PYTHONUTF8": "1"}
-    subprocess.run(command, env=env, cwd=str(ROOT), stdin=subprocess.DEVNULL)
+    finished = True
+
+    try:
+        subprocess.run(command, env=env, cwd=str(ROOT), stdin=subprocess.DEVNULL, timeout=args.limite_modelo)
+    except subprocess.TimeoutExpired:
+        finished = False
+        print(f"\n!!! {model} passou de {args.limite_modelo // 60} min e foi interrompido; os resultados parciais foram mantidos.")
+    except OSError as exc:
+        finished = False
+        print(f"\n!!! Não consegui rodar a bateria de {model}: {exc}")
+
     stop_model(model)
+
+    if not wait_unloaded(model):
+        print(f"Aviso: {model} ainda aparece carregado; o próximo modelo pode usar CPU.")
+
+    return finished
+
+
+def write_partial(entries: list[dict], root: Path) -> None:
+    """Grava o COMPARATIVO.md com o que já existe, depois de cada modelo (uma queda não perde nada)."""
+
+    try:
+        report = build_comparison(entries, datetime.datetime.now().strftime("%d/%m/%Y %H:%M"))
+        (root / "COMPARATIVO.md").write_text(report, encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001
+        print(f"(não consegui atualizar o COMPARATIVO.md parcial: {exc})")
 
 
 def orchestrate(args) -> int:
+    from bateria import ensure_ollama, keep_awake
     from core.console import ensure_utf8_console
 
     ensure_utf8_console()
@@ -327,6 +385,7 @@ def orchestrate(args) -> int:
         print("O Ollama não respondeu. Abra o Ollama e rode de novo.")
         return 1
 
+    resume = bool(args.retomar)
     missing = [m for m in models if not model_installed(m)]
 
     if not confirm_downloads(missing, args.sim):
@@ -337,36 +396,63 @@ def orchestrate(args) -> int:
         if not pull_model(model):
             print(f"Não consegui baixar {model}; ele será pulado.")
 
-    root = ROOT / "logs" / "comparacao" / datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    root = Path(args.retomar) if resume else ROOT / "logs" / "comparacao" / datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     root.mkdir(parents=True, exist_ok=True)
     print(f"\nComparação em: {root}\nOllama: {version.splitlines()[-1]}\n")
 
-    for model in models:
-        print(f"=== {model}: teste rápido ===")
+    try:
+        with keep_awake():
+            for model in models:
+                try:
+                    run_model(model, root, args, entries, resume, ensure_ollama)
+                except Exception as exc:  # noqa: BLE001 - um modelo com problema não pode derrubar os outros
+                    print(f"!!! Erro inesperado com {model}: {type(exc).__name__}: {exc}")
+                    entries.append({"label": model, "results": [], "meta": {}, "skipped": f"erro inesperado: {exc}"})
 
-        if not model_installed(model):
-            entries.append({"label": model, "results": [], "meta": {}, "skipped": "não está instalado"})
-            continue
-
-        smoke = smoke_test(model)
-        print(f"    respondeu: {'sim' if smoke['ok'] else 'NÃO'} | chamou ferramenta: {'sim' if smoke['tool_call'] else 'NÃO'} | {smoke['seconds']} s {smoke['error']}")
-
-        if not smoke["ok"]:
-            entries.append({"label": model, "results": [], "meta": {}, "smoke": smoke, "skipped": "incompatível: " + smoke["error"]})
-            continue
-
-        folder = root / slug(model)
-        print(f"=== {model}: bateria completa ===")
-        run_one(model, folder, args)
-        entry = collect(folder, model)
-
-        if entry is None:
-            entries.append({"label": model, "results": [], "meta": {}, "smoke": smoke, "skipped": "a bateria não gerou resultados"})
-        else:
-            entry["smoke"] = smoke
-            entries.append(entry)
+                write_partial(entries, root)
+    except KeyboardInterrupt:
+        print("\nInterrompido. Gerando o comparativo do que foi feito.")
 
     return finish(entries, root)
+
+
+def run_model(model: str, root: Path, args, entries: list[dict], resume: bool, ensure) -> None:
+    folder = root / slug(model)
+
+    if resume and (folder / "meta.json").exists():
+        done = collect(folder, model)
+
+        if done is not None:
+            print(f"=== {model}: já concluído numa rodada anterior, aproveitando ===")
+            entries.append(done)
+            return
+
+    print(f"=== {model}: teste rápido ===")
+
+    if not model_installed(model):
+        entries.append({"label": model, "results": [], "meta": {}, "skipped": "não está instalado"})
+        return
+
+    if not ensure():
+        entries.append({"label": model, "results": [], "meta": {}, "skipped": "Ollama indisponível"})
+        return
+
+    smoke = smoke_test(model)
+    print(f"    respondeu: {'sim' if smoke['ok'] else 'NÃO'} | chamou ferramenta: {'sim' if smoke['tool_call'] else 'NÃO'} | {smoke['seconds']} s {smoke['error']}")
+
+    if not smoke["ok"]:
+        entries.append({"label": model, "results": [], "meta": {}, "smoke": smoke, "skipped": "incompatível: " + smoke["error"]})
+        return
+
+    print(f"=== {model}: bateria completa ===")
+    run_one(model, folder, args, resume=resume and (folder / "resultados.json").exists())
+    entry = collect(folder, model)
+
+    if entry is None:
+        entries.append({"label": model, "results": [], "meta": {}, "smoke": smoke, "skipped": "a bateria não gerou resultados"})
+    else:
+        entry["smoke"] = smoke
+        entries.append(entry)
 
 
 def finish(entries: list[dict], root: Path) -> int:
@@ -403,6 +489,8 @@ def main(argv=None) -> int:
     parser.add_argument("--repeticoes", type=int, default=2)
     parser.add_argument("--sim", action="store_true", help="baixa os modelos que faltam sem perguntar")
     parser.add_argument("--montar", help="refaz o COMPARATIVO.md de uma pasta de comparação")
+    parser.add_argument("--retomar", help="continua uma comparação interrompida (pasta em logs/comparacao): aproveita modelos concluídos e o que já rodou")
+    parser.add_argument("--limite-modelo", type=int, default=MODEL_TIME_LIMIT_SECONDS, help="segundos máximos por modelo (padrão 6000)")
     args = parser.parse_args(argv)
 
     if args.montar:

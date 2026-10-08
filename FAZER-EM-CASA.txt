@@ -33,10 +33,19 @@ EM CASA, NA ORDEM
 
 CUIDADOS ENQUANTO RODA
 - Nao usar o PC para outra coisa pesada.
-- Desativar a suspensao/hibernacao do Windows (senao ele dorme e para tudo).
+- O proprio programa impede o Windows de suspender o PC. Mesmo assim, se puder, desative a suspensao.
 - Ter cerca de 11 GB livres em disco e internet para os downloads.
 - Nao fechar nem reiniciar o Ollama no meio.
 - Se algum caso falhar ou algum modelo for pulado: NAO mexer. O relatorio ja registra o motivo.
+
+
+SE A RODADA PARAR NO MEIO (queda de luz, PC reiniciou, fechou a janela sem querer)
+- Nao comece do zero. Rode de novo apontando para a pasta que ja foi criada:
+        comparar.bat --retomar logs\comparacao\NOME_DA_PASTA
+  (ele aproveita o que ja rodou e so faz o que falta)
+- Um caso que falha ou da erro NAO para os demais. Se o Ollama cair, o programa tenta
+  levanta-lo sozinho e repete o caso; essas falhas aparecem como "INFRA" e nao contam
+  contra o modelo.
 
 
 O QUE TRAZER DE VOLTA PARA MIM
