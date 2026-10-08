@@ -6,7 +6,7 @@ from core.harness.permissions import (
     authorize,
     parse_command,
 )
-from core.paths import PROJECT_ROOT, VENV_BIN_DIR
+from core.paths import PROJECT_ROOT, VENV_BIN_DIR, WORKSPACE_DIR
 
 
 INSTALLATION_COMMANDS = {
@@ -227,6 +227,44 @@ def check_constraints(
     return None
 
 
+MKDIR_COMMANDS = {"mkdir", "md"}
+MKDIR_IGNORED_FLAGS = {"-p", "/p", "-parents", "--parents"}
+
+
+def _make_workspace_dirs(parts: list[str]) -> dict | None:
+    """
+    mkdir/md só dentro de workspace/ é feito em Python e não pede confirmação. No Windows o
+    mkdir é um comando interno do cmd e não roda com shell=False, e criar pasta ali é inofensivo.
+    Qualquer outro caso devolve None e segue o fluxo normal (com confirmação).
+    """
+
+    if _normalize_executable(parts[0]) not in MKDIR_COMMANDS:
+        return None
+
+    targets = [arg.strip('"') for arg in parts[1:] if arg.lower() not in MKDIR_IGNORED_FLAGS]
+
+    if not targets or any(arg.startswith("-") for arg in targets):
+        return None
+
+    workspace = WORKSPACE_DIR.resolve()
+    folders = []
+
+    for arg in targets:
+        folder = (PROJECT_ROOT / arg).resolve()
+
+        if folder != workspace and workspace not in folder.parents:
+            return None
+
+        folders.append(folder)
+
+    for folder in folders:
+        folder.mkdir(parents=True, exist_ok=True)
+
+    names = ", ".join(str(folder.relative_to(PROJECT_ROOT)) for folder in folders)
+
+    return {"success": True, "returncode": 0, "stdout": f"Pasta(s) pronta(s): {names}", "stderr": "", "error": None}
+
+
 def run_command(
     command: str,
     reason: str,
@@ -274,6 +312,11 @@ def run_command(
 
     if constraint_error is not None:
         return constraint_error
+
+    made = _make_workspace_dirs(parts)
+
+    if made is not None:
+        return made
 
     # ---------------------------------------------------------
     # Permission Manager

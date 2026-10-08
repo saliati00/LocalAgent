@@ -24,8 +24,7 @@ EM CASA, NA ORDEM
               qwen3:8b (o atual), qwen3.5:9b e qwen3.5:4b
         - No comeco ele lista o que falta baixar (cerca de 10,5 GB: qwen3.5:9b e
           qwen3.5:4b) e pergunta "Baixar agora? (S/N)". Responder S.
-        - Depois e so deixar rodando: de 3 a 4,5 horas, sem digitar nada.
-          Pode deixar de um dia para o outro.
+        - Depois e so deixar rodando: cerca de 30 a 40 minutos no total, sem digitar nada.
         - No fim aparece uma tabela no terminal (um modelo por linha).
 
         Versao curta (bateria reduzida em cada modelo), se precisar:

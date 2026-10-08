@@ -453,6 +453,10 @@ def execute_tool(
             "tool_error": True,
         }
 
+    # Modelos costumam anexar 'reason' a qualquer ferramenta; onde ela não existe, ignora em vez de errar.
+    if isinstance(arguments, dict) and "reason" in arguments and "reason" not in ALLOWED_ARGUMENTS.get(name, set()):
+        arguments = {key: value for key, value in arguments.items() if key != "reason"}
+
     valid, error = validate_arguments(
         name,
         arguments,

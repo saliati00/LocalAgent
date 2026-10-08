@@ -1,6 +1,6 @@
 # Roteiro de testes no PC (primeira rodada)
 
-Para quem: **você**, depois de rodar o `instalar.bat`. Tempo: a bateria automática leva 1 a 1,5 hora sem você digitar; os testes manuais, cerca de 1 hora.
+Para quem: **você**, depois de rodar o `instalar.bat`. Tempo: a bateria automática leva cerca de 30 a 40 minutos sem você digitar (medido na primeira comparação real); os testes manuais, cerca de 1 hora.
 
 ## Regras desta rodada
 - Faça **uma coisa por vez**, na ordem.
@@ -30,7 +30,7 @@ Abra a pasta `LocalAgent` no Explorador de Arquivos, clique na **barra de endere
 ---
 
 ## Bateria e comparação de modelos (faça ISTO primeiro)
-Em vez de digitar teste por teste, dê duplo clique em **`comparar.bat`** e deixe rodando. Ele é a única porta de entrada: roda **a mesma bateria automática, sem digitar nada, em cada modelo** (`qwen3:8b`, `qwen3.5:9b` e `qwen3.5:4b`) e no fim mostra a comparação. Leva de 3 a 4,5 horas (cerca de 1 a 1,5 hora por modelo); deixe de um dia para o outro.
+Em vez de digitar teste por teste, dê duplo clique em **`comparar.bat`** e deixe rodando. Ele é a única porta de entrada: roda **a mesma bateria automática, sem digitar nada, em cada modelo** (`qwen3:8b`, `qwen3.5:9b` e `qwen3.5:4b`) e no fim mostra a comparação. Leva cerca de 30 a 40 minutos no total (uns 10 minutos por modelo, medido na primeira comparação real).
 
 Antes de começar ele mostra quais modelos faltam e o tamanho do download (cerca de 7 GB o 9b e 3,5 GB o 4b) e **pergunta se pode baixar** (S/N). Depois, para cada modelo: um teste rápido (o modelo responde? chama ferramenta?), a bateria de 26 casos (cerca de 35 execuções, os simples repetidos duas vezes) e a descarga do modelo da placa. Um modelo incompatível é pulado com o motivo anotado, sem derrubar o resto.
 

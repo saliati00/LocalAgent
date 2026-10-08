@@ -51,6 +51,21 @@ PROTECTED_PATHS = [
     (PROJECT_ROOT / "verificar.bat").resolve(),
     (PROJECT_ROOT / "requirements.txt").resolve(),
     (PROJECT_ROOT / "requirements-dev.txt").resolve(),
+    # Configuração e documentação do usuário: a primeira comparação real mostrou o agente
+    # reescrevendo opencode.json quando recebeu um pedido vago.
+    (PROJECT_ROOT / "opencode.json").resolve(),
+    (PROJECT_ROOT / "LEIA-ME-WINDOWS.md").resolve(),
+    (PROJECT_ROOT / "ROTEIRO-DE-TESTES.md").resolve(),
+    (PROJECT_ROOT / "FAZER-EM-CASA.txt").resolve(),
+    (PROJECT_ROOT / "comparar.bat").resolve(),
+    (PROJECT_ROOT / "specs" / "ambiente.md").resolve(),
+    (PROJECT_ROOT / ".gitignore").resolve(),
+    (PROJECT_ROOT / ".gitattributes").resolve(),
+    (PROJECT_ROOT / "scripts" / "bateria.py").resolve(),
+    (PROJECT_ROOT / "scripts" / "comparar_modelos.py").resolve(),
+    (PROJECT_ROOT / "scripts" / "check_ollama.py").resolve(),
+    (PROJECT_ROOT / "scripts" / "restaurar.py").resolve(),
+    (PROJECT_ROOT / "scripts" / "summarize_logs.py").resolve(),
 ]
 
 # Compatibilidade com código que ainda importa o nome antigo.

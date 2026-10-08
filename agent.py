@@ -143,7 +143,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "write_file",
-            "description": "Cria um novo arquivo ou substitui um arquivo inteiro dentro do projeto.",
+            "description": "Cria um novo arquivo (e as pastas que faltarem) ou substitui um arquivo inteiro dentro do projeto.",
             "parameters": {
                 "type": "object",
                 "properties": {

@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import time
+import unicodedata
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -45,8 +46,8 @@ PROTECTED = [
     "models/registry.json",
 ]
 
-# Arquivos que o agente pode alterar legitimamente em testes longos; a bateria os restaura no fim.
-RESTORED_AT_END = ["memory/store.json", "models/registry.json", "specs/projeto.md"]
+# Tamanho máximo de um arquivo versionado guardado na memória para restauração no fim.
+SNAPSHOT_MAX_BYTES = 2_000_000
 
 DEFAULT_TIMEOUT = 900
 SLOW_TIMEOUT = 1500
@@ -61,6 +62,14 @@ NO_ANSWER = re.compile(
 # Conferências
 # ---------------------------------------------------------
 
+def plain(text: str) -> str:
+    """Minúsculas e sem acentos: 'três' e 'tres' são o mesmo valor para as conferências."""
+
+    decomposed = unicodedata.normalize("NFKD", text)
+
+    return "".join(char for char in decomposed if not unicodedata.combining(char)).lower()
+
+
 def _text(relative: str) -> str | None:
     try:
         return (ROOT / relative).read_text(encoding="utf-8")
@@ -74,14 +83,14 @@ def has(relative: str, *needles: str, absent: tuple = ()) -> tuple[bool, str]:
     if content is None:
         return False, f"{relative} não foi criado"
 
-    low = content.lower()
+    low = plain(content)
 
     for needle in needles:
-        if needle.lower() not in low:
+        if plain(needle) not in low:
             return False, f"{relative} sem '{needle}' (conteúdo: {content[:80]!r})"
 
     for needle in absent:
-        if needle.lower() in low:
+        if plain(needle) in low:
             return False, f"{relative} ainda contém '{needle}'"
 
     return True, "ok"
@@ -92,10 +101,10 @@ def exists(relative: str) -> bool:
 
 
 def out_has(ctx, *needles: str) -> tuple[bool, str]:
-    low = ctx.out.lower()
+    low = plain(ctx.out)
 
     for needle in needles:
-        if needle.lower() not in low:
+        if plain(needle) not in low:
             return False, f"a resposta não menciona '{needle}'"
 
     return True, "ok"
@@ -356,6 +365,43 @@ def run_case(case_def: dict) -> dict:
 # Orquestração (processo pai)
 # ---------------------------------------------------------
 
+def snapshot_tracked() -> dict[str, bytes]:
+    """Conteúdo de todos os arquivos versionados antes da bateria (para desfazer o que o agente mexer)."""
+
+    listing = run_cmd(["git", "-C", str(ROOT), "ls-files"])
+    snapshot: dict[str, bytes] = {}
+
+    for name in listing.splitlines():
+        path = ROOT / name.strip()
+
+        try:
+            if path.is_file() and path.stat().st_size <= SNAPSHOT_MAX_BYTES:
+                snapshot[name.strip()] = path.read_bytes()
+        except OSError:
+            continue
+
+    return snapshot
+
+
+def restore_changed(snapshot: dict[str, bytes]) -> list[str]:
+    """Restaura só os arquivos versionados que mudaram DURANTE a bateria; devolve os nomes."""
+
+    restored = []
+
+    for name, original in snapshot.items():
+        path = ROOT / name
+
+        try:
+            if not path.exists() or path.read_bytes() != original:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(original)
+                restored.append(name)
+        except OSError:
+            continue
+
+    return restored
+
+
 def current_fast_model() -> str:
     from core.router.model_router import ModelRouter
 
@@ -468,7 +514,7 @@ def build_report(results: list[dict], meta: dict) -> str:
 
     lines += ["", "## ollama ps (logo após o primeiro caso)", "", "```", meta["ollama_ps"], "```"]
 
-    lines += ["", "## Arquivos do projeto restaurados ao final", ""]
+    lines += ["", "## Arquivos versionados que o agente alterou (restaurados ao final)", ""]
     lines += [f"- {name}" for name in meta["restored"]] or ["- nenhum (o agente não os alterou)"]
 
     lines += ["", "## git status ao final (marcas que o agente deixou)", "", "```", meta["git_status"] or "(limpo)", "```", ""]
@@ -493,7 +539,7 @@ def orchestrate(args) -> int:
     folder = Path(args.saida) if args.saida else ROOT / "logs" / "bateria" / started_at.strftime("%Y%m%d_%H%M%S")
     folder.mkdir(parents=True, exist_ok=True)
 
-    backups = {name: (ROOT / name).read_bytes() for name in RESTORED_AT_END if (ROOT / name).exists()}
+    backups = snapshot_tracked()
 
     plan = []
     for case_def in selected:
@@ -520,11 +566,7 @@ def orchestrate(args) -> int:
     except KeyboardInterrupt:
         print("\nInterrompido. Gerando o relatório do que foi feito.")
 
-    restored = []
-    for name, original in backups.items():
-        if (ROOT / name).read_bytes() != original:
-            (ROOT / name).write_bytes(original)
-            restored.append(name)
+    restored = restore_changed(backups)
 
     meta = {
         "model": current_fast_model(),
