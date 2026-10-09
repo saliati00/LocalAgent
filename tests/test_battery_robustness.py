@@ -321,27 +321,27 @@ def test_a_model_that_exceeds_its_time_limit_is_stopped_and_unloaded(tmp_path, m
         raise subprocess.TimeoutExpired("bateria", 5)
 
     monkeypatch.setattr(cmp.subprocess, "run", slow)
-    monkeypatch.setattr(cmp, "stop_model", stopped.append)
-    monkeypatch.setattr(cmp, "wait_unloaded", lambda model, seconds=40: True)
+    monkeypatch.setattr(cmp, "stop_model", lambda model, url=cmp.DEFAULT_URL: stopped.append(model))
+    monkeypatch.setattr(cmp, "wait_unloaded", lambda model, seconds=40, url=cmp.DEFAULT_URL: True)
 
-    assert cmp.run_one("m", tmp_path, args()) is False
+    assert cmp.run_one(cmp.profile_from_model("m"), tmp_path, args()) is False
     assert stopped == ["m"]
 
 
 def test_resume_flag_is_passed_to_the_battery(tmp_path, monkeypatch):
     seen = []
     monkeypatch.setattr(cmp.subprocess, "run", lambda command, **k: seen.append(command))
-    monkeypatch.setattr(cmp, "stop_model", lambda m: None)
-    monkeypatch.setattr(cmp, "wait_unloaded", lambda model, seconds=40: True)
+    monkeypatch.setattr(cmp, "stop_model", lambda model, url=cmp.DEFAULT_URL: None)
+    monkeypatch.setattr(cmp, "wait_unloaded", lambda model, seconds=40, url=cmp.DEFAULT_URL: True)
 
-    cmp.run_one("m", tmp_path, args(), resume=True)
+    cmp.run_one(cmp.profile_from_model("m"), tmp_path, args(), resume=True)
 
     assert "--retomar" in seen[0]
 
 
 def test_wait_unloaded_returns_when_the_model_leaves_memory(monkeypatch):
     listings = iter([(0, "NAME qwen3:8b"), (0, "NAME")])
-    monkeypatch.setattr(cmp, "run_cmd", lambda command, timeout=60: next(listings))
+    monkeypatch.setattr(cmp, "run_cmd", lambda command, timeout=60, env=None: next(listings))
     monkeypatch.setattr(cmp.time, "sleep", lambda s: None)
 
     assert cmp.wait_unloaded("qwen3:8b", seconds=30) is True
@@ -349,7 +349,7 @@ def test_wait_unloaded_returns_when_the_model_leaves_memory(monkeypatch):
 
 def test_wait_unloaded_gives_up_after_the_wait(monkeypatch):
     clock = iter([0, 1, 100])
-    monkeypatch.setattr(cmp, "run_cmd", lambda command, timeout=60: (0, "NAME qwen3:8b"))
+    monkeypatch.setattr(cmp, "run_cmd", lambda command, timeout=60, env=None: (0, "NAME qwen3:8b"))
     monkeypatch.setattr(cmp.time, "sleep", lambda s: None)
     monkeypatch.setattr(cmp.time, "time", lambda: next(clock))
 
@@ -371,7 +371,7 @@ def test_resume_reuses_a_model_whose_battery_already_finished(tmp_path, monkeypa
     (folder / "resultados.json").write_text(json.dumps([ok_result("a")]), encoding="utf-8")
     (folder / "meta.json").write_text(json.dumps({"model": "m"}), encoding="utf-8")
     entries: list[dict] = []
-    monkeypatch.setattr(cmp, "smoke_test", lambda m: pytest.fail("não devia testar de novo"))
+    monkeypatch.setattr(cmp, "smoke_test", lambda *a, **k: pytest.fail("não devia testar de novo"))
 
     cmp.run_model("m", tmp_path, args(), entries, resume=True, ensure=lambda: True)
 
@@ -456,11 +456,13 @@ def test_battery_resumes_from_a_partial_folder(tmp_path, monkeypatch):
 def test_full_comparison_flow_isolates_a_model_that_blows_up(tmp_path, monkeypatch):
     monkeypatch.setattr(bateria, "ensure_ollama", lambda wait_seconds=90: True)
     monkeypatch.setattr(cmp, "ROOT", tmp_path)
-    monkeypatch.setattr(cmp, "run_cmd", lambda command, timeout=60: (0, "ollama version is 9.9"))
+    monkeypatch.setattr(cmp, "run_cmd", lambda command, timeout=60, env=None: (0, "ollama version is 9.9"))
     monkeypatch.setattr(cmp, "model_installed", lambda m: True)
-    monkeypatch.setattr(cmp, "smoke_test", lambda m: {"ok": True, "tool_call": True, "seconds": 1, "error": ""})
+    monkeypatch.setattr(cmp, "smoke_test", lambda m, url=cmp.DEFAULT_URL, num_ctx=8192: {"ok": True, "tool_call": True, "seconds": 1, "error": ""})
 
-    def fake_run_one(model, folder, a, resume=False):
+    def fake_run_one(profile, folder, a, resume=False, url=cmp.DEFAULT_URL):
+        model = profile["model"]
+
         if model == "quebra":
             raise RuntimeError("falha esquisita")
 

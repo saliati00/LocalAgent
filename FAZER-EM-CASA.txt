@@ -1,42 +1,57 @@
-LOCALAGENT - O QUE FAZER EM CASA
-=================================
+LOCALAGENT - O QUE FAZER NA SEGUNDA-FEIRA (rodada longa)
+==========================================================
 
-EM CASA, NA ORDEM
-[ ] 1. Clonar o projeto:
-        git clone https://github.com/saliati00/LocalAgent.git
+Esta e a unica rodada ate a proxima. Ela foi montada para NAO desperdicar nada:
+um caso que falha nao para os outros, o que ja rodou fica salvo, e da para retomar.
 
-[ ] 2. Entrar na pasta LocalAgent e dar duplo clique em:  instalar.bat
-        (ele instala o necessario e baixa o qwen3:8b se faltar)
+O QUE ELA MEDE
+- 5 perfis, nesta ordem (os mais importantes primeiro):
+    9b          qwen3.5:9b, configuracao padrao
+    4b          qwen3.5:4b, configuracao padrao
+    9b-kv8      qwen3.5:9b com cache de KV quantizado (tenta caber 100% na placa)
+    4b-16k-kv8  qwen3.5:4b com contexto de 16 mil tokens e cache quantizado
+    8b          qwen3:8b (a referencia antiga)
+- 42 casos por perfil, incluindo 10 TAREFAS REAIS DE DESENVOLVIMENTO (corrigir bug,
+  implementar funcao, renomear em varios arquivos, escrever testes, refatorar...).
+  Nao sao mais so testes sinteticos.
+- Duracao: de 6 a 8 horas. Rode a noite e deixe.
 
-[ ] 3. Anotar a versao do Ollama (abrir o Prompt de Comando):
+
+ANTES DE COMECAR
+[ ] 1. Atualizar o projeto (Prompt de Comando, na pasta LocalAgent):
+        git checkout -- opencode.json
+        git pull
+    (se nao tiver a pasta: git clone https://github.com/saliati00/LocalAgent.git
+     e depois dar duplo clique em instalar.bat)
+
+[ ] 2. Anotar a versao do Ollama:
         ollama --version
         Numero que deu: ______________________
 
-[ ] 4. Teste que so voce pode fazer (2 minutos), ANTES de iniciar o passo 5:
+[ ] 3. Teste que so voce pode fazer (2 minutos), ANTES do passo 4:
         - abrir iniciar.bat
         - pedir:  Instale o cmake com winget.
         - a tela de confirmacao deve aparecer legivel
         - responder C e ENTER (cancelar) e sair do agente (ENTER vazio)
         Apareceu legivel? ( ) sim  ( ) nao
 
-[ ] 5. Duplo clique em:  comparar.bat
-        - Ele roda a MESMA bateria automatica em tres modelos:
-              qwen3:8b (o atual), qwen3.5:9b e qwen3.5:4b
-        - No comeco ele lista o que falta baixar (cerca de 10,5 GB: qwen3.5:9b e
-          qwen3.5:4b) e pergunta "Baixar agora? (S/N)". Responder S.
-        - Depois e so deixar rodando: cerca de 40 a 50 minutos no total, sem digitar nada.
-        - No fim aparece uma tabela no terminal (um modelo por linha).
+[ ] 4. Fechar tudo que for pesado (jogos, navegador com muitas abas) e dar duplo clique em:
+        comparar.bat
+        - Os modelos qwen3.5:9b, qwen3.5:4b e qwen3:8b ja devem estar instalados.
+          Se faltar algum, ele lista e pergunta "Baixar agora? (S/N)". Responder S.
+        - Depois e so deixar rodando. Nao digita nada.
 
-        Versao curta (bateria reduzida em cada modelo), se precisar:
-              comparar.bat --rapido
+        Versao curta (2 a 3 horas), se nao puder deixar a noite toda:
+              comparar.bat --perfis 9b,4b
 
 
 CUIDADOS ENQUANTO RODA
 - Nao usar o PC para outra coisa pesada.
 - O proprio programa impede o Windows de suspender o PC. Mesmo assim, se puder, desative a suspensao.
-- Ter cerca de 11 GB livres em disco e internet para os downloads.
-- Nao fechar nem reiniciar o Ollama no meio.
-- Se algum caso falhar ou algum modelo for pulado: NAO mexer. O relatorio ja registra o motivo.
+- Nao fechar a janela do comparar.bat nem reiniciar o Ollama.
+- Os perfis kv8 usam um segundo servidor do Ollama (porta 11435) que o programa sobe e
+  desce sozinho. Seu Ollama normal nao e tocado. Se aparecer um aviso sobre isso, nao mexa.
+- Se algum caso falhar ou algum perfil for pulado: NAO mexer. O relatorio ja registra o motivo.
 
 
 SE A RODADA PARAR NO MEIO (queda de luz, PC reiniciou, fechou a janela sem querer)
@@ -51,8 +66,8 @@ SE A RODADA PARAR NO MEIO (queda de luz, PC reiniciou, fechou a janela sem quere
 O QUE TRAZER DE VOLTA PARA MIM
 [ ] A pasta  logs\comparacao  inteira (tem o COMPARATIVO.md com a tabela)
 [ ] O arquivo  logs\agent.log
-[ ] O numero do "ollama --version" (passo 3)
-[ ] Se o teste do passo 4 apareceu legivel (sim/nao)
+[ ] O numero do "ollama --version" (passo 2)
+[ ] Se o teste do passo 3 apareceu legivel (sim/nao)
 
 
 SE DER ERRO

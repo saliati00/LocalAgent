@@ -1,5 +1,6 @@
 import datetime
 import json
+import os
 import re
 import time
 from pathlib import Path
@@ -54,12 +55,25 @@ from tools.manager import execute_tool
 from tools.terminal import check_constraints
 
 
+# Servidor e janela de contexto podem ser trocados só numa execução (comparação de configurações).
+OLLAMA_URL = os.environ.get("LOCALAGENT_OLLAMA_URL", "").strip() or "http://localhost:11434"
+
 client = ollama.Client(
-    host="http://localhost:11434",
+    host=OLLAMA_URL,
     timeout=120,
 )
 
-NUM_CTX = 8192
+
+def _context_from_environment(default: int = 8192) -> int:
+    try:
+        value = int(os.environ.get("LOCALAGENT_NUM_CTX", "").strip() or default)
+    except ValueError:
+        return default
+
+    return value if 2048 <= value <= 131072 else default
+
+
+NUM_CTX = _context_from_environment()
 MAX_ITERATIONS = 30
 MAX_ESCALATIONS = 3
 
@@ -816,7 +830,7 @@ def agent(prompt: str):
 
     router = ModelRouter()
     active_model = router.route_task(prompt, state.current_phase)
-    context_mgr = ContextManager(max_context_chars=18000, max_repeated_tool_calls=2)
+    context_mgr = ContextManager(max_context_chars=int(18000 * NUM_CTX / 8192), max_repeated_tool_calls=2)
 
     log("MODEL_ROUTER", f"Modelo selecionado: {active_model}")
 

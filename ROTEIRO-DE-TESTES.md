@@ -30,9 +30,11 @@ Abra a pasta `LocalAgent` no Explorador de Arquivos, clique na **barra de endere
 ---
 
 ## Bateria e comparação de modelos (faça ISTO primeiro)
-Em vez de digitar teste por teste, dê duplo clique em **`comparar.bat`** e deixe rodando. Ele é a única porta de entrada: roda **a mesma bateria automática, sem digitar nada, em cada modelo** (`qwen3:8b`, `qwen3.5:9b` e `qwen3.5:4b`) e no fim mostra a comparação. Leva cerca de 40 a 50 minutos no total (uns 10 minutos por modelo, medido na primeira comparação real).
+Em vez de digitar teste por teste, dê duplo clique em **`comparar.bat`** e deixe rodando. Ele é a única porta de entrada: roda **a mesma bateria automática, sem digitar nada, em cada perfil** e no fim mostra a comparação. Um **perfil** é um modelo mais a janela de contexto e a configuração do servidor. Os cinco perfis padrão, nesta ordem (os mais importantes primeiro, para uma rodada cortada ainda responder o essencial): `9b` (qwen3.5:9b), `4b` (qwen3.5:4b), `9b-kv8` (9b com cache de KV quantizado, para caber 100% na placa), `4b-16k-kv8` (4b com contexto de 16 mil tokens) e `8b` (qwen3:8b, a referência antiga). Leva de **6 a 8 horas** no total (cerca de 1 a 1,5 hora por perfil): rode à noite ou no fim de semana.
 
-Antes de começar ele mostra quais modelos faltam e o tamanho do download (cerca de 7 GB o 9b e 3,5 GB o 4b) e **pergunta se pode baixar** (S/N). Depois, para cada modelo: um teste rápido (o modelo responde? chama ferramenta?), a bateria de 32 casos (cerca de 47 execuções, os simples e os de raciocínio repetidos duas vezes) e a descarga do modelo da placa. Um modelo incompatível é pulado com o motivo anotado, sem derrubar o resto.
+Antes de começar ele mostra quais modelos faltam e o tamanho do download (cerca de 7 GB o 9b e 3,5 GB o 4b) e **pergunta se pode baixar** (S/N). Depois, para cada modelo: um teste rápido (o modelo responde? chama ferramenta?), a bateria de 42 casos (cerca de 67 execuções: os simples, os de raciocínio e as 10 **tarefas reais de desenvolvimento** repetidos duas vezes) e a descarga do modelo da placa. Os perfis com cache quantizado usam um **servidor próprio do Ollama na porta 11435**, que sobe e desce sozinho; o seu Ollama normal não é tocado. Um modelo incompatível é pulado com o motivo anotado, sem derrubar o resto.
+
+**Tarefas reais de desenvolvimento (não são testes sintéticos):** dez mini-projetos Python com pedidos escritos como você escreveria: corrigir um bug fazendo o teste passar, implementar uma função pela docstring, renomear uma função em vários arquivos, adicionar uma opção de linha de comando, resumir um CSV, escrever testes (que precisam pegar defeitos plantados no código), corrigir um estado compartilhado entre objetos, filtrar um JSON, consertar um erro de importação e refatorar código duplicado. O veredito vem de um teste oculto, da execução do programa ou de um teste de mutação, nunca de um modelo. Nesses casos o usuário simulado **aperta ENTER nas confirmações** (como você faria para rodar `python` ou `pytest`); nos casos de segurança continua cancelando tudo.
 
 **O que a bateria testa:** tarefas pequenas, edição de arquivos, busca, web, raciocínio (contas, regras e extração de valores), segurança (pedido de instalação, arquivo protegido, troca de modelo, apagar pasta, ordem escondida dentro de arquivo, tarefa que é sua), as tarefas 1 e 2 (inclusive repetidas) e, só como informação, a tarefa 3 e o desenvolvimento geral. Toda confirmação é cancelada automaticamente, então nada perigoso acontece. Os arquivos que o agente possa ter mexido (`memory\store.json`, `models\registry.json`, `specs\projeto.md`) são restaurados sozinhos.
 
@@ -40,10 +42,11 @@ Antes de começar ele mostra quais modelos faltam e o tamanho do download (cerca
 
 Opções (todas opcionais):
 - `comparar.bat --rapido`: bateria curta em cada modelo (sem as tarefas longas).
-- `comparar.bat --modelos qwen3:8b`: só um modelo (ou uma lista separada por vírgulas).
+- `comparar.bat --perfis 9b,4b`: só estes perfis (versão de 2 a 3 horas). Disponíveis: 9b, 4b, 9b-kv8, 4b-16k-kv8, 8b.
+- `comparar.bat --modelos qwen3:8b`: em vez de perfis, só esse modelo com a configuração padrão (ou uma lista separada por vírgulas).
 - `comparar.bat --sim`: baixa os modelos que faltam sem perguntar.
 
-Para trocar de modelo só numa execução (sem mexer no registro), o projeto lê a variável `LOCALAGENT_FAST_MODEL`.
+Para trocar de modelo, de contexto ou de servidor só numa execução (sem mexer no registro), o projeto lê as variáveis `LOCALAGENT_FAST_MODEL`, `LOCALAGENT_NUM_CTX` e `LOCALAGENT_OLLAMA_URL`.
 
 **À prova de falhas:** um caso que falha, trava ou dá erro **não interrompe os demais**. Cada caso roda isolado e com tempo limite; o resultado de cada um é gravado em disco na hora; se o Ollama cair no meio, a bateria tenta subi-lo de novo e repete o caso (a falha que sobrar é marcada como "de infraestrutura" e **não conta contra o modelo**); arquivos versionados que o agente alterar são restaurados **logo depois do caso**, para não contaminar os seguintes; e o Windows é impedido de suspender o PC enquanto roda. Cada modelo tem um limite de 100 minutos.
 

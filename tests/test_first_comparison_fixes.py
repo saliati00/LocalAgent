@@ -105,7 +105,7 @@ def test_reason_is_still_required_where_declared(monkeypatch):
 
 @pytest.mark.parametrize("relative", [
     "opencode.json", "LEIA-ME-WINDOWS.md", "ROTEIRO-DE-TESTES.md", "FAZER-EM-CASA.txt", "comparar.bat",
-    "specs/ambiente.md", ".gitignore", "scripts/bateria.py", "scripts/comparar_modelos.py",
+    "specs/ambiente.md", ".gitignore", "scripts/bateria.py", "scripts/comparar_modelos.py", "scripts/tarefas_reais.py",
 ])
 def test_user_config_docs_and_battery_scripts_are_protected(relative):
     assert (PROJECT_ROOT / relative).resolve() in PROTECTED_PATHS

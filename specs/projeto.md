@@ -1160,6 +1160,7 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [x] Tools por perfil: grupo base de 8 tools e grupos extras sob demanda (pronto quando: pytest tests/test_tool_profiles.py passa)
 * [x] Busca no código com a tool search_files (pronto quando: pytest tests/test_search_files.py passa)
 * [x] Backup automático antes de sobrescrever arquivos e script de restauração (pronto quando: pytest tests/test_backups.py passa)
+* [x] Tarefas reais de desenvolvimento na bateria (10 mini-projetos com teste oculto, execução e teste de mutação) e perfis de teste com cache de KV quantizado e contexto maior (pronto quando: pytest tests/test_real_tasks.py tests/test_profiles.py passa)
 * [x] Segunda comparação real analisada: mkdir também em scripts/eval/ e caminhos com barra inicial lidos a partir do projeto (pronto quando: pytest tests/test_first_comparison_fixes.py passa)
 * [x] Bateria à prova de falhas: erro num caso não para os demais, Ollama reiniciado e caso repetido, falhas de infraestrutura fora da nota, gravação a cada caso, retomada e PC sem suspender (pronto quando: pytest tests/test_battery_robustness.py passa)
 * [x] Primeira comparação real analisada e corrigida: mkdir nativo no workspace, argumento reason tolerado, mais arquivos protegidos, conferências sem acento, restauração geral (pronto quando: pytest tests/test_first_comparison_fixes.py passa)
@@ -1538,7 +1539,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-506 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+559 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1906,3 +1907,16 @@ Com a bateria corrigida (32 casos, 47 execuções, 44 contáveis; Ollama 0.40.1;
 * **O 4b ocupa metade da VRAM** (3,3 GB) e roda a 99 tokens/s, o que deixa cerca de 4,5 GB livres para ampliar o contexto, hoje o limite mais apertado (`CONTEXT_NEAR_LIMIT`: 8b 2, 9b 4, 4b 1).
 * **Cancelamentos ainda tiram casos do 9b e do 4b:** os Qwen3.5 recorrem a `python -c`, `grep` e `dir`, que pedem confirmação, enquanto o 8b usa as ferramentas do projeto. Para um humano é só apertar ENTER; na bateria sem teclado o caso é cancelado.
 * **Decisão provisória:** descartar o `qwen3:8b` como FAST. Entre 9b (mais preciso) e 4b (mais rápido e com folga de VRAM) a escolha depende de testar contexto maior no 4b e cache de KV quantizado no 9b.
+
+
+---
+
+# 54. TAREFAS REAIS E PERFIS DE TESTE
+
+Até a segunda comparação o agente só tinha sido medido em testes sintéticos (criar um arquivo, somar dois números). Para medir o trabalho de desenvolvimento de verdade, e para testar a configuração do servidor, a bateria ganhou duas peças (`scripts/tarefas_reais.py`, `scripts/comparar_modelos.py`):
+
+* **Dez tarefas reais** (grupo `real`, 2 rodadas cada): corrigir bug com teste visível, implementar função pela docstring, renomear função em vários arquivos, adicionar opção de CLI, resumir CSV, escrever testes, corrigir estado compartilhado (argumento mutável padrão), filtrar JSON, corrigir importação e refatorar duplicação. O pedido é escrito como um usuário escreveria, sem nomear ferramentas.
+* **Veredito sem modelo:** teste oculto escrito só depois que o agente termina, execução do programa com saída exata, e **teste de mutação** para a tarefa de escrever testes (os testes do agente precisam passar no código certo e falhar em três defeitos plantados). O teste visível é protegido por conteúdo: alterá-lo ou apagá-lo reprova. Cada verificador é validado contra o estado inicial (deve reprovar) e contra uma solução de referência (deve aprovar).
+* **Usuário simulado que aprova:** só nesse grupo as confirmações recebem ENTER (para o agente poder rodar `python` e `pytest`); o Permission Manager continua barrando o que é proibido, os arquivos protegidos são conferidos por hash e os arquivos versionados são restaurados após cada caso.
+* **Perfis (modelo + contexto + servidor):** `9b`, `4b`, `9b-kv8`, `4b-16k-kv8` e `8b`. Os perfis com `OLLAMA_FLASH_ATTENTION=1` e `OLLAMA_KV_CACHE_TYPE=q8_0` rodam num servidor próprio do Ollama na porta 11435 (mesmos modelos, encerrado ao final), sem tocar no Ollama do usuário. `LOCALAGENT_NUM_CTX` muda a janela de contexto do agente (e o limite de compactação do histórico acompanha) e `LOCALAGENT_OLLAMA_URL` aponta o servidor.
+* **Hipóteses a verificar:** o cache de KV em 8 bits deve tirar o `9b` da CPU (hoje 12%) sem perder qualidade; o `4b` com 16 mil tokens deve aliviar o `CONTEXT_NEAR_LIMIT`. O relatório mostra o `ollama ps` de cada perfil para conferir.

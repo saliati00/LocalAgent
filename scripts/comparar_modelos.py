@@ -12,6 +12,7 @@ resto do projeto não mudam. Tudo fica em logs/comparacao/<data>/ e o resultado 
 """
 
 import argparse
+import contextlib
 import datetime
 import json
 import os
@@ -27,6 +28,23 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 DEFAULT_MODELS = ["qwen3:8b", "qwen3.5:9b", "qwen3.5:4b"]
 BASE_LABEL = "qwen3:8b"
+DEFAULT_URL = "http://localhost:11434"
+VARIANT_PORT = 11435
+VARIANT_WAIT_SECONDS = 90
+
+# Cache de KV quantizado (metade da memória do cache): variáveis do SERVIDOR do Ollama.
+KV8 = {"OLLAMA_FLASH_ATTENTION": "1", "OLLAMA_KV_CACHE_TYPE": "q8_0"}
+
+# Perfis = modelo + janela de contexto + configuração do servidor. Os que mudam o servidor rodam num
+# servidor próprio (porta 11435), sem mexer no Ollama normal do usuário.
+PROFILES = {
+    "9b": {"model": "qwen3.5:9b", "num_ctx": 8192, "server": {}},
+    "4b": {"model": "qwen3.5:4b", "num_ctx": 8192, "server": {}},
+    "9b-kv8": {"model": "qwen3.5:9b", "num_ctx": 8192, "server": KV8},
+    "4b-16k-kv8": {"model": "qwen3.5:4b", "num_ctx": 16384, "server": KV8},
+    "8b": {"model": "qwen3:8b", "num_ctx": 8192, "server": {}},
+}
+DEFAULT_PROFILES = ["9b", "4b", "9b-kv8", "4b-16k-kv8", "8b"]
 APPROX_DOWNLOAD_GB = {"qwen3:8b": 5.2, "qwen3.5:9b": 7.0, "qwen3.5:4b": 3.5}
 MIN_ACCEPTABLE_TOK_S = 15
 SMOKE_TIMEOUT_SECONDS = 180
@@ -47,13 +65,36 @@ def slug(model: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "-", model).strip("-")
 
 
+def profile_from_model(model: str) -> dict:
+    return {"label": model, "model": model, "num_ctx": 8192, "server": {}}
+
+
+def resolve_profiles(args) -> list[dict]:
+    """--modelos (lista de modelos, config padrão) tem prioridade; senão --perfis; senão os perfis padrão."""
+
+    if getattr(args, "modelos", ""):
+        return [profile_from_model(m.strip()) for m in args.modelos.split(",") if m.strip()]
+
+    names = [n.strip() for n in (getattr(args, "perfis", "") or ",".join(DEFAULT_PROFILES)).split(",") if n.strip()]
+    unknown = [n for n in names if n not in PROFILES]
+
+    if unknown:
+        raise SystemExit(f"Perfis desconhecidos: {', '.join(unknown)}. Disponíveis: {', '.join(PROFILES)}.")
+
+    return [{"label": name, **PROFILES[name]} for name in names]
+
+
+def host_of(url: str) -> str:
+    return url.split("://", 1)[-1]
+
+
 # ---------------------------------------------------------
 # Verificações de ambiente (injetáveis nos testes)
 # ---------------------------------------------------------
 
-def run_cmd(args: list[str], timeout: int = 60) -> tuple[int, str]:
+def run_cmd(args: list[str], timeout: int = 60, env: dict | None = None) -> tuple[int, str]:
     try:
-        done = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+        done = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout, env=env)
         return done.returncode, (done.stdout + done.stderr).strip()
     except (OSError, subprocess.SubprocessError) as exc:
         return 1, str(exc)
@@ -68,16 +109,22 @@ def pull_model(model: str) -> bool:
     return subprocess.run(["ollama", "pull", model]).returncode == 0
 
 
-def stop_model(model: str) -> None:
-    run_cmd(["ollama", "stop", model])
+def server_env(url: str) -> dict:
+    """Ambiente para os comandos `ollama ...` falarem com o servidor certo."""
+
+    return {**os.environ, "OLLAMA_HOST": host_of(url)}
 
 
-def smoke_test(model: str) -> dict:
+def stop_model(model: str, url: str = DEFAULT_URL) -> None:
+    run_cmd(["ollama", "stop", model], env=server_env(url))
+
+
+def smoke_test(model: str, url: str = DEFAULT_URL, num_ctx: int = 8192) -> dict:
     """Uma chamada real: o modelo responde, aceita `think=False` e sabe pedir uma ferramenta?"""
 
     import ollama
 
-    client = ollama.Client(host="http://localhost:11434", timeout=SMOKE_TIMEOUT_SECONDS)
+    client = ollama.Client(host=url, timeout=SMOKE_TIMEOUT_SECONDS)
     started = time.monotonic()
 
     try:
@@ -86,7 +133,7 @@ def smoke_test(model: str) -> dict:
             messages=[{"role": "user", "content": "Use a ferramenta ping com o texto 'oi'."}],
             tools=[PING_TOOL],
             think=False,
-            options={"num_ctx": 8192},
+            options={"num_ctx": num_ctx},
         )
     except Exception as exc:  # noqa: BLE001 - qualquer erro do servidor deve virar motivo no relatório
         return {"ok": False, "tool_call": False, "seconds": round(time.monotonic() - started, 1), "error": str(exc)[:200]}
@@ -94,6 +141,55 @@ def smoke_test(model: str) -> dict:
     calls = getattr(response.message, "tool_calls", None) or []
 
     return {"ok": True, "tool_call": bool(calls), "seconds": round(time.monotonic() - started, 1), "error": ""}
+
+
+@contextlib.contextmanager
+def server_for(profile: dict, folder: Path):
+    """
+    Servidor do perfil. Sem configuração especial, é o Ollama normal. Com ela (por exemplo cache de KV
+    quantizado), sobe um servidor próprio na porta 11435, usa os mesmos modelos já baixados e o encerra no fim.
+    """
+
+    if not profile.get("server"):
+        yield DEFAULT_URL
+        return
+
+    from bateria import ollama_alive
+
+    url = f"http://127.0.0.1:{VARIANT_PORT}"
+    env = {**os.environ, **profile["server"], "OLLAMA_HOST": host_of(url)}
+    folder.mkdir(parents=True, exist_ok=True)
+    log = open(folder / "servidor-ollama.log", "w", encoding="utf-8")
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+
+    try:
+        process = subprocess.Popen(["ollama", "serve"], env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log, creationflags=flags)
+    except OSError as exc:
+        log.close()
+        raise RuntimeError(f"não consegui iniciar o servidor do perfil: {exc}") from exc
+
+    try:
+        deadline = time.time() + VARIANT_WAIT_SECONDS
+
+        while time.time() < deadline and not ollama_alive(url=url):
+            if process.poll() is not None:
+                raise RuntimeError("o servidor do perfil encerrou ao iniciar (ver servidor-ollama.log)")
+
+            time.sleep(2)
+
+        if not ollama_alive(url=url):
+            raise RuntimeError("o servidor do perfil não respondeu a tempo")
+
+        yield url
+    finally:
+        process.terminate()
+
+        try:
+            process.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            process.kill()
+
+        log.close()
 
 
 # ---------------------------------------------------------
@@ -263,6 +359,16 @@ def build_comparison(entries: list[dict], date: str) -> str:
     else:
         lines.append("- nenhum")
 
+    profiled = [e for e in entries if e.get("profile")]
+
+    if profiled:
+        lines += ["", "## Perfis testados", "", "| Perfil | Modelo | Contexto | Servidor |", "|---|---|---|---|"]
+
+        for e in profiled:
+            p = e["profile"]
+            server = ", ".join(f"{k}={v}" for k, v in p.get("server", {}).items()) or "padrão"
+            lines.append(f"| {e['label']} | {p['model']} | {p['num_ctx']} | {server} |")
+
     lines += ["", "## Cabe na placa? (`ollama ps` logo após o primeiro caso)", ""]
 
     for s in summaries:
@@ -303,13 +409,13 @@ def confirm_downloads(missing: list[str], assume_yes: bool) -> bool:
         return False
 
 
-def wait_unloaded(model: str, seconds: int = UNLOAD_WAIT_SECONDS) -> bool:
+def wait_unloaded(model: str, seconds: int = UNLOAD_WAIT_SECONDS, url: str = DEFAULT_URL) -> bool:
     """Espera o modelo sair da memória (dois modelos juntos não cabem nos 8 GB e vazariam para a CPU)."""
 
     deadline = time.time() + seconds
 
     while time.time() < deadline:
-        _, listing = run_cmd(["ollama", "ps"])
+        _, listing = run_cmd(["ollama", "ps"], env=server_env(url))
 
         if model.lower() not in listing.lower():
             return True
@@ -319,8 +425,8 @@ def wait_unloaded(model: str, seconds: int = UNLOAD_WAIT_SECONDS) -> bool:
     return False
 
 
-def run_one(model: str, folder: Path, args, resume: bool = False) -> bool:
-    """Roda a bateria de um modelo. Devolve False se estourou o tempo (os resultados parciais ficam em disco)."""
+def run_one(profile: dict, folder: Path, args, resume: bool = False, url: str = DEFAULT_URL) -> bool:
+    """Roda a bateria de um perfil. Devolve False se estourou o tempo (os resultados parciais ficam em disco)."""
 
     command = [sys.executable, str(ROOT / "scripts" / "bateria.py"), "--saida", str(folder), "--repeticoes", str(args.repeticoes)]
 
@@ -330,22 +436,26 @@ def run_one(model: str, folder: Path, args, resume: bool = False) -> bool:
     if resume:
         command.append("--retomar")
 
-    env = {**os.environ, "LOCALAGENT_FAST_MODEL": model, "PYTHONUTF8": "1"}
+    env = {
+        **os.environ, **profile.get("server", {}),
+        "LOCALAGENT_FAST_MODEL": profile["model"], "LOCALAGENT_NUM_CTX": str(profile.get("num_ctx", 8192)),
+        "LOCALAGENT_OLLAMA_URL": url, "OLLAMA_HOST": host_of(url), "PYTHONUTF8": "1",
+    }
     finished = True
 
     try:
         subprocess.run(command, env=env, cwd=str(ROOT), stdin=subprocess.DEVNULL, timeout=args.limite_modelo)
     except subprocess.TimeoutExpired:
         finished = False
-        print(f"\n!!! {model} passou de {args.limite_modelo // 60} min e foi interrompido; os resultados parciais foram mantidos.")
+        print(f"\n!!! {profile['label']} passou de {args.limite_modelo // 60} min e foi interrompido; os resultados parciais foram mantidos.")
     except OSError as exc:
         finished = False
-        print(f"\n!!! Não consegui rodar a bateria de {model}: {exc}")
+        print(f"\n!!! Não consegui rodar a bateria de {profile['label']}: {exc}")
 
-    stop_model(model)
+    stop_model(profile["model"], url)
 
-    if not wait_unloaded(model):
-        print(f"Aviso: {model} ainda aparece carregado; o próximo modelo pode usar CPU.")
+    if not wait_unloaded(profile["model"], url=url):
+        print(f"Aviso: {profile['model']} ainda aparece carregado; o próximo perfil pode usar CPU.")
 
     return finished
 
@@ -366,7 +476,7 @@ def orchestrate(args) -> int:
 
     ensure_utf8_console()
 
-    models = [m.strip() for m in args.modelos.split(",") if m.strip()]
+    profiles = resolve_profiles(args)
     entries: list[dict] = []
 
     if args.base:
@@ -377,7 +487,7 @@ def orchestrate(args) -> int:
             return 1
 
         entries.append(base)
-        models = [m for m in models if m != args.base_nome]
+        profiles = [p for p in profiles if p["label"] != args.base_nome]
 
     code, version = run_cmd(["ollama", "--version"])
 
@@ -386,6 +496,7 @@ def orchestrate(args) -> int:
         return 1
 
     resume = bool(args.retomar)
+    models = list(dict.fromkeys(p["model"] for p in profiles))
     missing = [m for m in models if not model_installed(m)]
 
     if not confirm_downloads(missing, args.sim):
@@ -394,20 +505,20 @@ def orchestrate(args) -> int:
 
     for model in missing:
         if not pull_model(model):
-            print(f"Não consegui baixar {model}; ele será pulado.")
+            print(f"Não consegui baixar {model}; os perfis dele serão pulados.")
 
     root = Path(args.retomar) if resume else ROOT / "logs" / "comparacao" / datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     root.mkdir(parents=True, exist_ok=True)
-    print(f"\nComparação em: {root}\nOllama: {version.splitlines()[-1]}\n")
+    print(f"\nComparação em: {root}\nOllama: {version.splitlines()[-1]}\nPerfis: {', '.join(p['label'] for p in profiles)}\n")
 
     try:
         with keep_awake():
-            for model in models:
+            for profile in profiles:
                 try:
-                    run_model(model, root, args, entries, resume, ensure_ollama)
-                except Exception as exc:  # noqa: BLE001 - um modelo com problema não pode derrubar os outros
-                    print(f"!!! Erro inesperado com {model}: {type(exc).__name__}: {exc}")
-                    entries.append({"label": model, "results": [], "meta": {}, "skipped": f"erro inesperado: {exc}"})
+                    run_model(profile, root, args, entries, resume, ensure_ollama)
+                except Exception as exc:  # noqa: BLE001 - um perfil com problema não pode derrubar os outros
+                    print(f"!!! Erro inesperado com {profile['label']}: {type(exc).__name__}: {exc}")
+                    entries.append({"label": profile["label"], "results": [], "meta": {}, "profile": profile, "skipped": f"erro inesperado: {exc}"})
 
                 write_partial(entries, root)
     except KeyboardInterrupt:
@@ -416,42 +527,54 @@ def orchestrate(args) -> int:
     return finish(entries, root)
 
 
-def run_model(model: str, root: Path, args, entries: list[dict], resume: bool, ensure) -> None:
-    folder = root / slug(model)
+def run_model(profile: dict, root: Path, args, entries: list[dict], resume: bool, ensure) -> None:
+    if isinstance(profile, str):
+        profile = profile_from_model(profile)
+
+    label, model = profile["label"], profile["model"]
+    folder = root / slug(label)
 
     if resume and (folder / "meta.json").exists():
-        done = collect(folder, model)
+        done = collect(folder, label)
 
         if done is not None:
-            print(f"=== {model}: já concluído numa rodada anterior, aproveitando ===")
+            print(f"=== {label}: já concluído numa rodada anterior, aproveitando ===")
+            done["profile"] = profile
             entries.append(done)
             return
 
-    print(f"=== {model}: teste rápido ===")
+    print(f"=== {label} ({model}, contexto {profile.get('num_ctx', 8192)}"
+          + (", servidor próprio" if profile.get("server") else "") + "): teste rápido ===")
 
     if not model_installed(model):
-        entries.append({"label": model, "results": [], "meta": {}, "skipped": "não está instalado"})
+        entries.append({"label": label, "results": [], "meta": {}, "profile": profile, "skipped": "não está instalado"})
         return
 
-    if not ensure():
-        entries.append({"label": model, "results": [], "meta": {}, "skipped": "Ollama indisponível"})
+    if not profile.get("server") and not ensure():
+        entries.append({"label": label, "results": [], "meta": {}, "profile": profile, "skipped": "Ollama indisponível"})
         return
 
-    smoke = smoke_test(model)
-    print(f"    respondeu: {'sim' if smoke['ok'] else 'NÃO'} | chamou ferramenta: {'sim' if smoke['tool_call'] else 'NÃO'} | {smoke['seconds']} s {smoke['error']}")
+    try:
+        with server_for(profile, folder) as url:
+            smoke = smoke_test(model, url, profile.get("num_ctx", 8192))
+            print(f"    respondeu: {'sim' if smoke['ok'] else 'NÃO'} | chamou ferramenta: {'sim' if smoke['tool_call'] else 'NÃO'} | {smoke['seconds']} s {smoke['error']}")
 
-    if not smoke["ok"]:
-        entries.append({"label": model, "results": [], "meta": {}, "smoke": smoke, "skipped": "incompatível: " + smoke["error"]})
+            if not smoke["ok"]:
+                entries.append({"label": label, "results": [], "meta": {}, "profile": profile, "smoke": smoke, "skipped": "incompatível: " + smoke["error"]})
+                return
+
+            print(f"=== {label}: bateria completa ===")
+            run_one(profile, folder, args, resume=resume and (folder / "resultados.json").exists(), url=url)
+    except RuntimeError as exc:
+        entries.append({"label": label, "results": [], "meta": {}, "profile": profile, "skipped": str(exc)})
         return
 
-    print(f"=== {model}: bateria completa ===")
-    run_one(model, folder, args, resume=resume and (folder / "resultados.json").exists())
-    entry = collect(folder, model)
+    entry = collect(folder, label)
 
     if entry is None:
-        entries.append({"label": model, "results": [], "meta": {}, "smoke": smoke, "skipped": "a bateria não gerou resultados"})
+        entries.append({"label": label, "results": [], "meta": {}, "profile": profile, "smoke": smoke, "skipped": "a bateria não gerou resultados"})
     else:
-        entry["smoke"] = smoke
+        entry.update(smoke=smoke, profile=profile)
         entries.append(entry)
 
 
@@ -482,7 +605,8 @@ def rebuild(folder: Path) -> int:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Compara modelos FAST com a mesma bateria")
-    parser.add_argument("--modelos", default=",".join(DEFAULT_MODELS), help="modelos separados por vírgula")
+    parser.add_argument("--perfis", default="", help="perfis separados por vírgula (padrão: " + ",".join(DEFAULT_PROFILES) + ")")
+    parser.add_argument("--modelos", default="", help="em vez de perfis: modelos separados por vírgula, com a configuração padrão")
     parser.add_argument("--base", help="pasta de uma bateria já feita (reaproveitada como coluna do modelo base)")
     parser.add_argument("--base-nome", default=BASE_LABEL, help="nome do modelo da rodada --base")
     parser.add_argument("--rapido", action="store_true", help="bateria curta em cada modelo")
