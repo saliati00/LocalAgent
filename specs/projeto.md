@@ -1161,6 +1161,7 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [x] Busca no código com a tool search_files (pronto quando: pytest tests/test_search_files.py passa)
 * [x] Backup automático antes de sobrescrever arquivos e script de restauração (pronto quando: pytest tests/test_backups.py passa)
 * [x] Retomada automática: o comparar.bat continua sozinho a rodada que não terminou (mesmos perfis, menos de 7 dias), sem precisar da pasta (pronto quando: pytest tests/test_auto_resume.py passa)
+* [x] Monitor de consumo da máquina durante a bateria (VRAM, uso e potência da GPU, temperatura, RAM livre, CPU) e estimativa de memória e velocidade por modelo (pronto quando: pytest tests/test_resource_monitor.py tests/test_estimar_desempenho.py passa)
 * [x] Recuperação de travamento do PC: caso em andamento em disco, snapshot dos arquivos versionados em disco, perfil abandonado após 2 quedas e vigia de memória (pronto quando: pytest tests/test_crash_recovery.py passa)
 * [x] Candidatos a SMART na bateria (gemma4:12b, gpt-oss:20b, qwen3-coder:30b e o par 9b+gemma4:12b) com grupos difíceis, mais tempo e SMART por variável de ambiente (pronto quando: pytest tests/test_smart_profiles.py passa)
 * [x] Tarefas reais de desenvolvimento na bateria (10 mini-projetos com teste oculto, execução e teste de mutação) e perfis de teste com cache de KV quantizado e contexto maior (pronto quando: pytest tests/test_real_tasks.py tests/test_profiles.py passa)
@@ -1542,7 +1543,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-620 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+646 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1952,3 +1953,15 @@ Um congelamento total não deixa o programa agir: nada em memória sobrevive. A 
 * **Limites:** se o PC congelar tão fundo que o próprio vigia não rode, a proteção é a retomada, não a prevenção; a leitura de memória só existe no Windows; 700 MB e 20 s são valores iniciais sem calibração.
 
 * **Retomada automática (acréscimo ao capítulo 56):** cada rodada grava `rodada.json` (perfis, opções, início, `concluida`). Sem `--retomar` e sem `--nova`, o `comparar.bat` procura a rodada mais recente com `concluida=false` que tenha pedido exatamente os mesmos perfis e comece há menos de 7 dias; se achar, continua dela com as opções originais (`--rapido`, repetições, limite) e avisa. A marca de conclusão só é gravada quando todos os perfis foram percorridos sem Ctrl+C; qualquer parada anormal deixa a rodada elegível. `--nova` ignora a rodada antiga; `--retomar <pasta>` continua a escolhida.
+
+
+---
+
+# 57. CONSUMO DA MÁQUINA E ESTIMATIVA DE DESEMPENHO
+
+Os logs das duas primeiras comparações não tinham telemetria de consumo: só tokens por segundo, tempo por chamada e uma foto do `ollama ps` por perfil. Isso deixava o travamento do PC sem rastro e a escolha de modelos sem dados de VRAM e potência.
+
+* **Monitor de consumo** (`consumo.csv` em cada pasta de perfil): a cada ciclo do vigia (5 s) grava hora, RAM livre, VRAM usada e total, uso da GPU, potência, temperatura (`nvidia-smi`) e uso da CPU (`GetSystemTimes`). Cada linha é forçada ao disco (`fsync`): depois de um travamento o rastro de memória até o último instante fica salvo. Leitura que falha é ignorada, e o monitor nunca derruba a bateria. O comparativo ganha a seção "Consumo da máquina" (picos de VRAM, uso médio e pico da GPU, potência e temperatura pico, RAM livre mínima, CPU média).
+* **Estimativa antes de rodar** (`scripts/estimar_desempenho.py`): modelo de teto de memória e largura de banda. Memória = pesos + cache de KV (linear no contexto; metade com `--kv8`) + folga; o que não cabe na VRAM vai para a RAM por camadas, e o que não cabe na RAM vira paginação em disco (risco de travar). Velocidade = 1 / (bytes na GPU ÷ banda da GPU + bytes na RAM ÷ banda da RAM), lendo só os especialistas ativos nos modelos MoE; eficiências de 70% (GPU) e 60% (RAM).
+* **Calibração:** erro de -12% (`qwen3:8b`), +9% (`qwen3.5:4b`) e +10% (`qwen3.5:9b`) contra os tok/s medidos. A estimativa **errou o encaixe do 9b** (previu 100% na GPU; mediu 12% na CPU), porque a arquitetura híbrida usa mais memória do que os pesos sugerem. Confiar nas classes (cabe, parcial, não cabe) mais que nos números; os parâmetros ativos e o cache de KV dos modelos novos são palpites de família.
+* **Previsão para os candidatos a SMART (RTX 3070 8 GB, 16 GB de RAM):** `gemma4:12b` parcial (15% na CPU, ~14 tok/s), `gpt-oss:20b` parcial (50% na CPU, ~19 tok/s), `gemma4:26b` parcial (62%, ~14 tok/s), `devstral:24b` inviável (~3 tok/s) e `qwen3-coder:30b` **não cabe** nos ~11 GB de RAM utilizáveis (risco de paginar e travar). A rodada confere ou desmente cada um, e o monitor de consumo passa a medir de verdade.

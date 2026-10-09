@@ -13,6 +13,7 @@ resto do projeto não mudam. Tudo fica em logs/comparacao/<data>/ e o resultado 
 
 import argparse
 import contextlib
+import csv
 import datetime
 import json
 import os
@@ -78,6 +79,10 @@ AUTO_RESUME_MAX_AGE_DAYS = 7
 LOW_MEMORY_MB = 700
 LOW_MEMORY_POLLS = 4
 MEMORY_POLL_SECONDS = 5
+
+# Monitor de consumo: uma linha a cada ciclo do vigia, em disco (sobrevive a um travamento do PC).
+CONSUMPTION_FILE = "consumo.csv"
+CONSUMPTION_COLUMNS = ["hora", "ram_livre_mb", "vram_usada_mb", "vram_total_mb", "gpu_pct", "potencia_w", "temp_c", "cpu_pct"]
 
 PING_TOOL = {
     "type": "function",
@@ -247,8 +252,12 @@ def collect(folder: Path, label: str | None = None) -> dict | None:
     if not isinstance(results, list):
         return None
 
+    consumption = summarize_consumption(folder / CONSUMPTION_FILE)
     aborted = folder / "abortado.txt"
     note = {"aborted": aborted.read_text(encoding="utf-8").strip()} if aborted.exists() else {}
+
+    if consumption:
+        note["consumption"] = consumption
 
     if meta.get("abandoned"):
         note["skipped"] = meta["abandoned"]
@@ -423,6 +432,22 @@ def build_comparison(entries: list[dict], date: str) -> str:
         lines += ["", "## ATENÇÃO: perfis interrompidos", ""]
         lines += [f"- {e['label']}: {e['aborted']}" for e in interrupted]
 
+    measured = [e for e in entries if e.get("consumption")]
+
+    if measured:
+        lines += ["", "## Consumo da máquina (uma amostra a cada 5 s durante a bateria; detalhe em consumo.csv de cada perfil)", "",
+                  "| Perfil | Amostras | VRAM pico (MB) | GPU uso médio / pico (%) | Potência pico (W) | Temp. pico (°C) | RAM livre mínima (MB) | CPU média (%) |",
+                  "|---|---|---|---|---|---|---|---|"]
+
+        def show(value):
+            return "-" if value is None else str(value)
+
+        for e in measured:
+            m = e["consumption"]
+            vram = show(m["vram_pico_mb"]) + (f" de {int(m['vram_total_mb'])}" if m.get("vram_total_mb") else "")
+            lines.append(f"| {e['label']} | {m['amostras']} | {vram} | {show(m['gpu_medio_pct'])} / {show(m['gpu_pico_pct'])} | "
+                         f"{show(m['potencia_pico_w'])} | {show(m['temp_pico_c'])} | {show(m['ram_livre_min_mb'])} | {show(m['cpu_medio_pct'])} |")
+
     lines += ["", "## Cabe na placa? (`ollama ps` logo após o primeiro caso)", ""]
 
     for s in summaries:
@@ -529,7 +554,145 @@ def kill_tree(process) -> None:
         pass
 
 
-def run_guarded(command, env, cwd, timeout, memory=None, popen=None, clock=None, poll=MEMORY_POLL_SECONDS) -> str:
+def _number(text: str) -> float | None:
+    try:
+        return float(text.strip())
+    except ValueError:
+        return None  # "[N/A]" e afins
+
+
+def read_gpu(run=None) -> dict:
+    """VRAM, uso, potência e temperatura da GPU NVIDIA (vazio se não houver nvidia-smi)."""
+
+    run = run or run_cmd
+    code, output = run(["nvidia-smi", "--query-gpu=memory.used,memory.total,utilization.gpu,power.draw,temperature.gpu",
+                        "--format=csv,noheader,nounits"], 15)
+
+    if code != 0 or not output.strip():
+        return {}
+
+    parts = output.strip().splitlines()[0].split(",")
+
+    if len(parts) < 5:
+        return {}
+
+    keys = ["vram_usada_mb", "vram_total_mb", "gpu_pct", "potencia_w", "temp_c"]
+
+    return {key: value for key, value in zip(keys, (_number(p) for p in parts[:5])) if value is not None}
+
+
+class CpuMeter:
+    """Uso total da CPU entre duas leituras (Windows: GetSystemTimes). A primeira leitura devolve None."""
+
+    def __init__(self):
+        self.last = None
+
+    def read(self) -> float | None:
+        if os.name != "nt":
+            return None
+
+        import ctypes
+
+        idle, kernel, user = (ctypes.c_ulonglong(), ctypes.c_ulonglong(), ctypes.c_ulonglong())
+
+        try:
+            ok = ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(idle), ctypes.byref(kernel), ctypes.byref(user))
+        except Exception:  # noqa: BLE001
+            return None
+
+        if not ok:
+            return None
+
+        now = (idle.value, kernel.value, user.value)
+        previous, self.last = self.last, now
+
+        if previous is None:
+            return None
+
+        total = (now[1] - previous[1]) + (now[2] - previous[2])
+        busy = total - (now[0] - previous[0])
+
+        return round(100 * busy / total, 1) if total > 0 else None
+
+
+def sample_resources(memory=None, gpu=None, cpu=None, clock=None) -> dict:
+    """Uma amostra do consumo da máquina; o que não puder ser lido fica de fora."""
+
+    sample = {"hora": (clock or (lambda: datetime.datetime.now().strftime("%H:%M:%S")))()}
+    free = (memory or available_memory_mb)()
+
+    if free is not None:
+        sample["ram_livre_mb"] = free
+
+    sample.update((gpu or read_gpu)())
+    usage = cpu() if cpu else None
+
+    if usage is not None:
+        sample["cpu_pct"] = usage
+
+    return sample
+
+
+def append_sample(path: Path, sample: dict) -> None:
+    """Acrescenta a amostra e já força a gravação em disco: se o PC travar, o rastro até ali fica salvo."""
+
+    try:
+        new = not path.exists()
+
+        with open(path, "a", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=CONSUMPTION_COLUMNS, extrasaction="ignore", restval="")
+
+            if new:
+                writer.writeheader()
+
+            writer.writerow(sample)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except OSError:
+        pass
+
+
+def summarize_consumption(path: Path) -> dict | None:
+    """Picos e médias do consumo gravado (None se não houver amostras)."""
+
+    try:
+        with open(path, newline="", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+    except OSError:
+        return None
+
+    if not rows:
+        return None
+
+    def values(column):
+        found = []
+
+        for item in rows:
+            number = _number(item.get(column) or "")
+
+            if number is not None:
+                found.append(number)
+
+        return found
+
+    def peak(column):
+        data = values(column)
+        return max(data) if data else None
+
+    def low(column):
+        data = values(column)
+        return min(data) if data else None
+
+    def mean(column):
+        data = values(column)
+        return round(sum(data) / len(data), 1) if data else None
+
+    return {"amostras": len(rows), "vram_pico_mb": peak("vram_usada_mb"), "vram_total_mb": peak("vram_total_mb"),
+            "gpu_medio_pct": mean("gpu_pct"), "gpu_pico_pct": peak("gpu_pct"), "potencia_pico_w": peak("potencia_w"),
+            "temp_pico_c": peak("temp_c"), "ram_livre_min_mb": low("ram_livre_mb"), "cpu_medio_pct": mean("cpu_pct")}
+
+
+def run_guarded(command, env, cwd, timeout, memory=None, popen=None, clock=None, poll=MEMORY_POLL_SECONDS, sampler=None) -> str:
     """
     Roda o processo vigiando tempo e memória. Devolve "ok", "timeout" ou "memoria". Se a RAM livre ficar
     abaixo do mínimo por vários ciclos seguidos, mata a árvore de processos antes de o PC travar.
@@ -552,6 +715,12 @@ def run_guarded(command, env, cwd, timeout, memory=None, popen=None, clock=None,
         if clock() > deadline:
             kill_tree(process)
             return "timeout"
+
+        if sampler is not None:
+            try:
+                sampler()
+            except Exception:  # noqa: BLE001 - o monitor nunca pode derrubar a bateria
+                pass
 
         free = memory()
         low = low + 1 if free is not None and free < LOW_MEMORY_MB else 0
@@ -595,7 +764,10 @@ def run_one(profile: dict, folder: Path, args, resume: bool = False, url: str = 
     finished = True
 
     try:
-        outcome = run_guarded(command, env, str(ROOT), limit)
+        folder.mkdir(parents=True, exist_ok=True)
+        cpu = CpuMeter()
+        outcome = run_guarded(command, env, str(ROOT), limit,
+                              sampler=lambda: append_sample(folder / CONSUMPTION_FILE, sample_resources(cpu=cpu.read)))
 
         if outcome == "timeout":
             finished = False

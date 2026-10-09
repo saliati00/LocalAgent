@@ -100,7 +100,8 @@ SE A RODADA PARAR NO MEIO (queda de luz, PC reiniciou, fechou a janela sem quere
 
 
 O QUE TRAZER DE VOLTA PARA MIM
-[ ] A pasta  logs\comparacao  inteira (tem o COMPARATIVO.md com a tabela)
+[ ] A pasta  logs\comparacao  inteira (tem o COMPARATIVO.md com a tabela e, em cada perfil,
+    o consumo.csv: VRAM, GPU, RAM livre, temperatura. Se o PC travar, ele guarda o rastro)
 [ ] O arquivo  logs\agent.log
 [ ] O numero do "ollama --version" (passo 2)
 [ ] Se o teste do passo 3 apareceu legivel (sim/nao)
