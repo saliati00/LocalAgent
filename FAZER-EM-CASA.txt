@@ -70,9 +70,11 @@ CUIDADOS ENQUANTO RODA
 
 SE O PC TRAVAR (tela congelada, tudo lento demais, precisou segurar o botao de ligar)
 - Reinicie o PC normalmente. Nao precisa apagar nada.
-- Abra o Prompt de Comando na pasta LocalAgent e rode, com o NOME da pasta que a rodada criou
-  (dir logs\comparacao mostra):
-        comparar.bat --retomar logs\comparacao\NOME_DA_PASTA
+- Abra a pasta LocalAgent e de duplo clique em  comparar.bat  DE NOVO (o mesmo comando de antes).
+  Ele percebe sozinho que a rodada anterior nao terminou e CONTINUA de onde parou.
+  Nao precisa procurar nome de pasta. (Para ignorar a rodada antiga e comecar do zero: comparar.bat --nova)
+- Se voce tinha usado opcoes (por exemplo --perfis fast), repita as MESMAS opcoes: ele so retoma
+  a rodada que pediu exatamente os mesmos perfis, e so se tiver menos de 7 dias.
 - O que o programa faz sozinho ao retomar:
     * aproveita tudo que ja tinha rodado (cada caso e gravado no disco assim que termina);
     * marca o caso que estava rodando como "interrompido" (nao conta contra o modelo);

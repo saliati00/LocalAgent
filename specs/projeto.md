@@ -1160,6 +1160,7 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [x] Tools por perfil: grupo base de 8 tools e grupos extras sob demanda (pronto quando: pytest tests/test_tool_profiles.py passa)
 * [x] Busca no código com a tool search_files (pronto quando: pytest tests/test_search_files.py passa)
 * [x] Backup automático antes de sobrescrever arquivos e script de restauração (pronto quando: pytest tests/test_backups.py passa)
+* [x] Retomada automática: o comparar.bat continua sozinho a rodada que não terminou (mesmos perfis, menos de 7 dias), sem precisar da pasta (pronto quando: pytest tests/test_auto_resume.py passa)
 * [x] Recuperação de travamento do PC: caso em andamento em disco, snapshot dos arquivos versionados em disco, perfil abandonado após 2 quedas e vigia de memória (pronto quando: pytest tests/test_crash_recovery.py passa)
 * [x] Candidatos a SMART na bateria (gemma4:12b, gpt-oss:20b, qwen3-coder:30b e o par 9b+gemma4:12b) com grupos difíceis, mais tempo e SMART por variável de ambiente (pronto quando: pytest tests/test_smart_profiles.py passa)
 * [x] Tarefas reais de desenvolvimento na bateria (10 mini-projetos com teste oculto, execução e teste de mutação) e perfis de teste com cache de KV quantizado e contexto maior (pronto quando: pytest tests/test_real_tasks.py tests/test_profiles.py passa)
@@ -1541,7 +1542,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-600 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+613 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1949,3 +1950,5 @@ Um congelamento total não deixa o programa agir: nada em memória sobrevive. A 
 * **Vigia de memória** (`run_guarded`): consulta a RAM livre (`GlobalMemoryStatusEx`) a cada 5 s; abaixo de 700 MB por 4 ciclos seguidos encerra a árvore de processos (`taskkill /T /F`) antes da paginação pesada, descarrega o modelo e grava `abortado.txt`, que o relatório destaca em "perfis interrompidos". O mesmo laço aplica o limite de tempo do perfil.
 * **Retomada em dois níveis:** `comparar.bat --retomar <pasta>` aproveita perfis concluídos e continua o perfil parcial (inclusive se o travamento foi no primeiro caso, quando só existem o marcador e o snapshot).
 * **Limites:** se o PC congelar tão fundo que o próprio vigia não rode, a proteção é a retomada, não a prevenção; a leitura de memória só existe no Windows; 700 MB e 20 s são valores iniciais sem calibração.
+
+* **Retomada automática (acréscimo ao capítulo 56):** cada rodada grava `rodada.json` (perfis, opções, início, `concluida`). Sem `--retomar` e sem `--nova`, o `comparar.bat` procura a rodada mais recente com `concluida=false` que tenha pedido exatamente os mesmos perfis e comece há menos de 7 dias; se achar, continua dela com as opções originais (`--rapido`, repetições, limite) e avisa. A marca de conclusão só é gravada quando todos os perfis foram percorridos sem Ctrl+C; qualquer parada anormal deixa a rodada elegível. `--nova` ignora a rodada antiga; `--retomar <pasta>` continua a escolhida.

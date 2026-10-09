@@ -69,6 +69,10 @@ SMOKE_TIMEOUT_SECONDS = 180
 MODEL_TIME_LIMIT_SECONDS = 6000
 UNLOAD_WAIT_SECONDS = 40
 
+# Uma rodada que não terminou é retomada sozinha na próxima execução (se for recente e pedir os mesmos perfis).
+RUN_FILE = "rodada.json"
+AUTO_RESUME_MAX_AGE_DAYS = 7
+
 # Vigia de memória: se a RAM livre ficar abaixo disto por vários ciclos seguidos, o perfil é abortado
 # antes que o Windows entre em paginação pesada e trave o PC.
 LOW_MEMORY_MB = 700
@@ -620,6 +624,71 @@ def write_partial(entries: list[dict], root: Path) -> None:
         print(f"(não consegui atualizar o COMPARATIVO.md parcial: {exc})")
 
 
+def new_run_folder() -> Path:
+    """Pasta de uma rodada nova; nunca reaproveita uma que já exista (duas execuções no mesmo segundo)."""
+
+    base = ROOT / "logs" / "comparacao"
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    folder, number = base / stamp, 1
+
+    while folder.exists():
+        number += 1
+        folder = base / f"{stamp}_{number}"
+
+    return folder
+
+
+def write_run_file(root: Path, profiles: list[dict], args, completed: bool, started: str | None = None) -> None:
+    """Marca em disco o que esta rodada é e se terminou. Sem a marca de conclusão, a próxima execução continua dela."""
+
+    try:
+        previous = json.loads((root / RUN_FILE).read_text(encoding="utf-8")) if (root / RUN_FILE).exists() else {}
+    except (OSError, ValueError):
+        previous = {}
+
+    data = {
+        "perfis": [p["label"] for p in profiles],
+        "rapido": bool(getattr(args, "rapido", False)),
+        "repeticoes": getattr(args, "repeticoes", 2),
+        "limite_modelo": getattr(args, "limite_modelo", MODEL_TIME_LIMIT_SECONDS),
+        "iniciada": previous.get("iniciada") or started or datetime.datetime.now().isoformat(timespec="seconds"),
+        "retomadas": previous.get("retomadas", 0) + (1 if previous and not completed and getattr(args, "_resumed", False) else 0),
+        "concluida": completed,
+    }
+
+    try:
+        (root / RUN_FILE).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def find_unfinished(labels: list[str], base: Path | None = None, now: datetime.datetime | None = None) -> tuple[Path, dict] | None:
+    """A rodada mais recente que não terminou, pediu exatamente estes perfis e é recente o bastante."""
+
+    base = base or ROOT / "logs" / "comparacao"
+    now = now or datetime.datetime.now()
+
+    if not base.exists():
+        return None
+
+    for folder in sorted((p for p in base.iterdir() if p.is_dir()), reverse=True):
+        try:
+            data = json.loads((folder / RUN_FILE).read_text(encoding="utf-8"))
+            started = datetime.datetime.fromisoformat(data["iniciada"])
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+
+        if data.get("concluida") or data.get("perfis") != labels:
+            continue
+
+        if now - started > datetime.timedelta(days=AUTO_RESUME_MAX_AGE_DAYS):
+            continue
+
+        return folder, data
+
+    return None
+
+
 def orchestrate(args) -> int:
     from bateria import ensure_ollama, keep_awake
     from core.console import ensure_utf8_console
@@ -645,6 +714,20 @@ def orchestrate(args) -> int:
         print("O Ollama não respondeu. Abra o Ollama e rode de novo.")
         return 1
 
+    # Se a rodada anterior não terminou (travou, queda de luz, janela fechada), continua dela sozinho.
+    if not args.retomar and not getattr(args, "nova", False):
+        found = find_unfinished([p["label"] for p in profiles])
+
+        if found:
+            folder, saved = found
+            args.retomar = str(folder)
+            args._resumed = True
+            args.rapido = saved.get("rapido", args.rapido)
+            args.repeticoes = saved.get("repeticoes", args.repeticoes)
+            args.limite_modelo = saved.get("limite_modelo", args.limite_modelo)
+            print(f"Encontrei uma rodada que não terminou ({folder.name}, iniciada em {saved['iniciada']}). Continuando de onde parou.\n"
+                  "Para começar do zero, rode de novo com --nova.\n")
+
     resume = bool(args.retomar)
     models = list(dict.fromkeys(m for p in profiles for m in (p["model"], p.get("smart_model")) if m))
     missing = [m for m in models if not model_installed(m)]
@@ -657,8 +740,10 @@ def orchestrate(args) -> int:
         if not pull_model(model):
             print(f"Não consegui baixar {model}; os perfis dele serão pulados.")
 
-    root = Path(args.retomar) if resume else ROOT / "logs" / "comparacao" / datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    root = Path(args.retomar) if resume else new_run_folder()
     root.mkdir(parents=True, exist_ok=True)
+    write_run_file(root, profiles, args, completed=False)
+    interrupted = False
     print(f"\nComparação em: {root}\nOllama: {version.splitlines()[-1]}\nPerfis: {', '.join(p['label'] for p in profiles)}\n")
 
     try:
@@ -672,7 +757,10 @@ def orchestrate(args) -> int:
 
                 write_partial(entries, root)
     except KeyboardInterrupt:
-        print("\nInterrompido. Gerando o comparativo do que foi feito.")
+        interrupted = True
+        print("\nInterrompido. Gerando o comparativo do que foi feito. Rode o comparar.bat de novo para continuar de onde parou.")
+
+    write_run_file(root, profiles, args, completed=not interrupted)
 
     return finish(entries, root)
 
@@ -769,7 +857,8 @@ def main(argv=None) -> int:
     parser.add_argument("--repeticoes", type=int, default=2)
     parser.add_argument("--sim", action="store_true", help="baixa os modelos que faltam sem perguntar")
     parser.add_argument("--montar", help="refaz o COMPARATIVO.md de uma pasta de comparação")
-    parser.add_argument("--retomar", help="continua uma comparação interrompida (pasta em logs/comparacao): aproveita modelos concluídos e o que já rodou")
+    parser.add_argument("--retomar", help="continua uma comparação interrompida (pasta em logs/comparacao); normalmente não precisa: uma rodada que não terminou é retomada sozinha")
+    parser.add_argument("--nova", action="store_true", help="começa uma rodada nova, sem continuar a que não terminou")
     parser.add_argument("--limite-modelo", type=int, default=MODEL_TIME_LIMIT_SECONDS, help="segundos máximos por modelo (padrão 6000)")
     args = parser.parse_args(argv)
 
