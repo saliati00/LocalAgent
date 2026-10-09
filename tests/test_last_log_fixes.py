@@ -168,3 +168,54 @@ def test_replace_that_would_break_a_json_file_is_refused(tmp_path):
 
 def test_other_file_types_are_not_validated_as_json(tmp_path):
     assert write_file(str(tmp_path / "nota.txt"), "{isso não é json")["success"] is True
+
+
+# ---------------------------------------------------------
+# A tarefa 3 da bateria não pode passar só porque o runner de referência existe
+# ---------------------------------------------------------
+
+def test_task_three_case_removes_the_reference_runner_before_running(tmp_path, monkeypatch):
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import bateria
+
+    monkeypatch.setattr(bateria, "ROOT", tmp_path)
+    monkeypatch.setattr(bateria, "BATERIA_DIR", tmp_path / "workspace" / "bateria")
+    runner = tmp_path / "scripts" / "eval" / "runner.py"
+    runner.parent.mkdir(parents=True)
+    runner.write_text("# referência", encoding="utf-8")
+
+    bateria.prepare(next(c for c in bateria.CASES if c["id"] == "tarefa3-informativo"))
+
+    assert not runner.exists()
+
+
+def test_the_reference_runner_is_a_tracked_file_so_the_battery_restores_it():
+    import subprocess
+    from core.paths import PROJECT_ROOT
+
+    listed = subprocess.run(["git", "-C", str(PROJECT_ROOT), "ls-files", "scripts/eval/runner.py"], capture_output=True, text=True).stdout
+
+    assert "scripts/eval/runner.py" in listed
+
+
+def test_both_task_two_cases_start_without_the_reference_set(tmp_path, monkeypatch):
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import bateria
+
+    monkeypatch.setattr(bateria, "ROOT", tmp_path)
+    monkeypatch.setattr(bateria, "BATERIA_DIR", tmp_path / "workspace" / "bateria")
+
+    for case_id in ("tarefa2-primeira", "tarefa2-repeticao"):
+        reference = tmp_path / "scripts" / "eval" / "tarefas" / "tarefa-01.json"
+        reference.parent.mkdir(parents=True, exist_ok=True)
+        reference.write_text("{}", encoding="utf-8")
+
+        bateria.prepare(next(c for c in bateria.CASES if c["id"] == case_id))
+
+        assert not (tmp_path / "scripts" / "eval").exists(), case_id

@@ -340,8 +340,12 @@ CASES = [
     case("tarefa1-repeticao", "tarefas", "dê continuidade à tarefa 1", acceptance_of(1), kind="tarefa", keep=True),
     case("tarefa2-primeira", "tarefas", "dê continuidade à tarefa 2", acceptance_of(2), kind="tarefa", slow=True,
          setup={"__limpar__": ["scripts/eval", "workspace/tarefa-02"]}),
-    case("tarefa2-repeticao", "tarefas", "dê continuidade à tarefa 2", acceptance_of(2), kind="tarefa", slow=True, keep=True),
-    case("tarefa3-informativo", "tarefas", "dê continuidade à tarefa 3", acceptance_of(3), kind="tarefa", slow=True, info=True),
+    case("tarefa2-repeticao", "tarefas", "dê continuidade à tarefa 2", acceptance_of(2), kind="tarefa", slow=True,
+         # O conjunto de referência existe no projeto e volta depois de cada caso: limpa de novo, senão passaria sozinho.
+         setup={"__limpar__": ["scripts/eval", "workspace/tarefa-02"]}),
+    case("tarefa3-informativo", "tarefas", "dê continuidade à tarefa 3", acceptance_of(3), kind="tarefa", slow=True, info=True,
+         # O runner de referência agora existe no projeto: apaga antes (a restauração devolve depois), senão o aceite passaria sozinho.
+         setup={"__limpar__": ["scripts/eval/runner.py"]}),
     case("desenvolvimento-geral", "tarefas", "@iniciar-desenvolvimento", finished_cleanly, kind="tarefa", slow=True, info=True),
 ]
 

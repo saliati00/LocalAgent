@@ -1543,7 +1543,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-732 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+735 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -2009,4 +2009,5 @@ Bateria enxuta (o tempo de PC vai para o que decide):
 * **Comandos de leitura sem confirmação:** os Qwen3.5 perdiam casos porque usavam `dir`, `grep` e afins, que pediam confirmação (e no Windows nem existem fora do cmd). Agora `dir`/`ls` (listagem, `/s` ou `-R` recursivo), `grep`/`findstr` (busca com `-c`, `-i`, `-n`, `-r`, `-l`; `findstr /c:`, `/i`, `/n`, `/s`) e `type`/`cat` são feitos pelo Harness em Python, **só dentro do projeto e só leitura**. Opção desconhecida ou caminho fora do projeto seguem o fluxo normal, com confirmação. O `python -c` continua pedindo confirmação, porque executa código.
 * **Dica no `replace_in_file`:** em arquivo inexistente ou com alvo vazio, a mensagem diz para usar `write_file`, que cria o arquivo e as pastas.
 * **JSON validado antes de gravar:** `write_file` e `replace_in_file` recusam `.json` inválido (como já faziam com `.py`), com a linha, a coluna e uma dica. O 8B tinha gravado um JSON quebrado na tarefa 2.
+* **Medição protegida do conjunto de referência:** como o `scripts/eval/` agora existe no projeto (FASE 11), os casos da tarefa 2 (as duas rodadas) e da tarefa 3 apagam esses arquivos antes de rodar; a restauração dos arquivos versionados os devolve depois. Sem isso, qualquer modelo passaria nessas tarefas sem fazer nada, e a tarefa 3 é o principal critério para escolher o SMART.
 * **Não resolvido:** a janela apertada no desenvolvimento geral (`CONTEXT_NEAR_LIMIT`) depende do perfil de 16 mil tokens da próxima rodada para ser medida.
