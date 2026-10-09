@@ -30,7 +30,11 @@ Abra a pasta `LocalAgent` no Explorador de Arquivos, clique na **barra de endere
 ---
 
 ## Bateria e comparação de modelos (faça ISTO primeiro)
-Em vez de digitar teste por teste, dê duplo clique em **`comparar.bat`** e deixe rodando. Ele é a única porta de entrada: roda **a mesma bateria automática, sem digitar nada, em cada perfil** e no fim mostra a comparação. Um **perfil** é um modelo mais a janela de contexto e a configuração do servidor. Os cinco perfis padrão, nesta ordem (os mais importantes primeiro, para uma rodada cortada ainda responder o essencial): `9b` (qwen3.5:9b), `4b` (qwen3.5:4b), `9b-kv8` (9b com cache de KV quantizado, para caber 100% na placa), `4b-16k-kv8` (4b com contexto de 16 mil tokens) e `8b` (qwen3:8b, a referência antiga). Leva de **6 a 8 horas** no total (cerca de 1 a 1,5 hora por perfil): rode à noite ou no fim de semana.
+Em vez de digitar teste por teste, dê duplo clique em **`comparar.bat`** e deixe rodando. Ele é a única porta de entrada: roda **a mesma bateria automática, sem digitar nada, em cada perfil** e no fim mostra a comparação. Um **perfil** é um modelo mais a janela de contexto e a configuração do servidor. Os cinco perfis padrão, nesta ordem (os mais importantes primeiro, para uma rodada cortada ainda responder o essencial): `9b` (qwen3.5:9b), `4b` (qwen3.5:4b), `9b-kv8` (9b com cache de KV quantizado, para caber 100% na placa), `4b-16k-kv8` (4b com contexto de 16 mil tokens) e `8b` (qwen3:8b, a referência antiga). Esses são os perfis **FAST** (6 a 8 horas, cerca de 1 a 1,5 hora por perfil).
+
+Depois deles vêm os candidatos a **SMART**, o modelo maior que assume quando o FAST trava. Eles rodam **só os grupos difíceis** (raciocínio, tarefas reais e tarefas numeradas, inclusive a tarefa 3), uma rodada cada, com mais tempo por caso e por chamada (parte do modelo fica na CPU, então é lento): `s-gemma12` (gemma4:12b, ~8 GB), `s-gptoss20` (gpt-oss:20b, ~14 GB), `par-9b+gemma12` (o 9b como FAST que **entrega ao gemma4:12b** quando trava, o único perfil que testa o conjunto FAST+SMART de ponta a ponta) e `s-coder30` (qwen3-coder:30b, ~19 GB, no limite da sua RAM; fica por último de propósito). Os SMART levam de **mais 6 a 10 horas** (estimativa incerta: depende de quanto cada modelo cabe na GPU) e baixam cerca de 41 GB. Todos usam o servidor próprio com cache quantizado.
+
+Sem opções, o `comparar.bat` roda **tudo** (FAST e depois SMART), de 12 a 18 horas. Você pode dividir: `comparar.bat --perfis fast` numa noite e `comparar.bat --perfis smart` em outra.
 
 Antes de começar ele mostra quais modelos faltam e o tamanho do download (cerca de 7 GB o 9b e 3,5 GB o 4b) e **pergunta se pode baixar** (S/N). Depois, para cada modelo: um teste rápido (o modelo responde? chama ferramenta?), a bateria de 42 casos (cerca de 67 execuções: os simples, os de raciocínio e as 10 **tarefas reais de desenvolvimento** repetidos duas vezes) e a descarga do modelo da placa. Os perfis com cache quantizado usam um **servidor próprio do Ollama na porta 11435**, que sobe e desce sozinho; o seu Ollama normal não é tocado. Um modelo incompatível é pulado com o motivo anotado, sem derrubar o resto.
 
@@ -42,11 +46,11 @@ Antes de começar ele mostra quais modelos faltam e o tamanho do download (cerca
 
 Opções (todas opcionais):
 - `comparar.bat --rapido`: bateria curta em cada modelo (sem as tarefas longas).
-- `comparar.bat --perfis 9b,4b`: só estes perfis (versão de 2 a 3 horas). Disponíveis: 9b, 4b, 9b-kv8, 4b-16k-kv8, 8b.
+- `comparar.bat --perfis 9b,4b`: só estes perfis (versão de 2 a 3 horas). Disponíveis: 9b, 4b, 9b-kv8, 4b-16k-kv8, 8b, s-gemma12, s-gptoss20, par-9b+gemma12, s-coder30. Grupos: `fast`, `smart`, `tudo`.
 - `comparar.bat --modelos qwen3:8b`: em vez de perfis, só esse modelo com a configuração padrão (ou uma lista separada por vírgulas).
 - `comparar.bat --sim`: baixa os modelos que faltam sem perguntar.
 
-Para trocar de modelo, de contexto ou de servidor só numa execução (sem mexer no registro), o projeto lê as variáveis `LOCALAGENT_FAST_MODEL`, `LOCALAGENT_NUM_CTX` e `LOCALAGENT_OLLAMA_URL`.
+Para trocar de modelo, de contexto ou de servidor só numa execução (sem mexer no registro), o projeto lê as variáveis `LOCALAGENT_FAST_MODEL`, `LOCALAGENT_SMART_MODEL`, `LOCALAGENT_NUM_CTX`, `LOCALAGENT_OLLAMA_URL`, `LOCALAGENT_CALL_TIMEOUT` e `LOCALAGENT_TIMEOUT_FACTOR`.
 
 **À prova de falhas:** um caso que falha, trava ou dá erro **não interrompe os demais**. Cada caso roda isolado e com tempo limite; o resultado de cada um é gravado em disco na hora; se o Ollama cair no meio, a bateria tenta subi-lo de novo e repete o caso (a falha que sobrar é marcada como "de infraestrutura" e **não conta contra o modelo**); arquivos versionados que o agente alterar são restaurados **logo depois do caso**, para não contaminar os seguintes; e o Windows é impedido de suspender o PC enquanto roda. Cada modelo tem um limite de 100 minutos.
 

@@ -27,10 +27,10 @@ def args(**overrides):
 # ---------------------------------------------------------
 
 def test_default_profiles_cover_both_models_the_kv_cache_and_the_bigger_context():
-    profiles = cmp.resolve_profiles(args())
+    profiles = cmp.resolve_profiles(args(perfis="fast"))
     by_label = {p["label"]: p for p in profiles}
 
-    assert [p["label"] for p in profiles] == cmp.DEFAULT_PROFILES
+    assert [p["label"] for p in profiles] == cmp.FAST_PROFILES
     assert by_label["9b-kv8"]["server"]["OLLAMA_KV_CACHE_TYPE"] == "q8_0"
     assert by_label["9b-kv8"]["server"]["OLLAMA_FLASH_ATTENTION"] == "1"
     assert by_label["4b-16k-kv8"]["num_ctx"] == 16384
@@ -39,7 +39,7 @@ def test_default_profiles_cover_both_models_the_kv_cache_and_the_bigger_context(
 
 
 def test_the_most_valuable_profiles_run_first_so_a_cut_run_still_answers_the_question():
-    assert cmp.DEFAULT_PROFILES[:2] == ["9b", "4b"] and cmp.DEFAULT_PROFILES[-1] == "8b"
+    assert cmp.FAST_PROFILES[:2] == ["9b", "4b"] and cmp.FAST_PROFILES[-1] == "8b"
 
 
 def test_profiles_can_be_chosen_by_name_and_unknown_ones_are_rejected():
@@ -227,4 +227,4 @@ def test_comparison_lists_the_profiles_that_were_tested():
     report = cmp.build_comparison([entry], "01/01/2027")
 
     assert "## Perfis testados" in report
-    assert "| 9b-kv8 | qwen3.5:9b | 8192 | OLLAMA_FLASH_ATTENTION=1, OLLAMA_KV_CACHE_TYPE=q8_0 |" in report
+    assert "| 9b-kv8 | fast | qwen3.5:9b | 8192 | OLLAMA_FLASH_ATTENTION=1, OLLAMA_KV_CACHE_TYPE=q8_0 | todos |" in report

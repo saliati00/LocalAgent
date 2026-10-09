@@ -112,7 +112,7 @@ Todos os passos da instalação ficam registrados em **`instalacao.log`**. O que
 - **Desinstalar:** apague a pasta LocalAgent. O Ollama e o modelo ficam no Windows; para remover, use *Configurações → Aplicativos* (Ollama) e a pasta `C:\Users\SEU_USUARIO\.ollama`.
 
 ## Primeira rodada de testes
-Depois de instalar, dê duplo clique em **`comparar.bat`**: ele roda sozinho a bateria de testes (sem digitar nada) em cada modelo e mostra a comparação no fim (de 6 a 8 horas com todos os perfis; deixe de um dia para o outro). O relatório fica em `logs\comparacao`. O **`ROTEIRO-DE-TESTES.md`** explica o que ele faz e os poucos testes manuais que restam.
+Depois de instalar, dê duplo clique em **`comparar.bat`**: ele roda sozinho a bateria de testes (sem digitar nada) em cada modelo e mostra a comparação no fim (de 6 a 8 horas só com os modelos FAST e de 12 a 18 horas com os candidatos a SMART; deixe de um dia para o outro). O relatório fica em `logs\comparacao`. O **`ROTEIRO-DE-TESTES.md`** explica o que ele faz e os poucos testes manuais que restam.
 
 ## Resumo de 10 segundos
 

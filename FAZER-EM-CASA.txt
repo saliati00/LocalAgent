@@ -5,16 +5,25 @@ Esta e a unica rodada ate a proxima. Ela foi montada para NAO desperdicar nada:
 um caso que falha nao para os outros, o que ja rodou fica salvo, e da para retomar.
 
 O QUE ELA MEDE
-- 5 perfis, nesta ordem (os mais importantes primeiro):
+- 9 perfis, nesta ordem. Primeiro os FAST (o modelo do dia a dia):
     9b          qwen3.5:9b, configuracao padrao
     4b          qwen3.5:4b, configuracao padrao
     9b-kv8      qwen3.5:9b com cache de KV quantizado (tenta caber 100% na placa)
     4b-16k-kv8  qwen3.5:4b com contexto de 16 mil tokens e cache quantizado
     8b          qwen3:8b (a referencia antiga)
-- 42 casos por perfil, incluindo 10 TAREFAS REAIS DE DESENVOLVIMENTO (corrigir bug,
+  Depois os candidatos a SMART (o modelo maior, que assume quando o FAST trava),
+  so nos casos dificeis (raciocinio, tarefas reais, tarefas numeradas):
+    s-gemma12       gemma4:12b (~8 GB)
+    s-gptoss20      gpt-oss:20b (~14 GB)
+    par-9b+gemma12  o 9b como FAST que ENTREGA ao gemma4:12b quando trava
+                    (testa o conjunto de ponta a ponta)
+    s-coder30       qwen3-coder:30b (~19 GB, no limite da sua RAM; por ultimo)
+- 42 casos por perfil FAST, incluindo 10 TAREFAS REAIS DE DESENVOLVIMENTO (corrigir bug,
   implementar funcao, renomear em varios arquivos, escrever testes, refatorar...).
   Nao sao mais so testes sinteticos.
-- Duracao: de 6 a 8 horas. Rode a noite e deixe.
+- Duracao: FAST de 6 a 8 horas; SMART mais 6 a 10 horas (estimativa incerta).
+  Tudo junto: de 12 a 18 horas. Pode dividir em duas noites (veja o passo 4).
+- Downloads dos SMART: cerca de 41 GB no total (o programa pergunta antes de baixar).
 
 
 ANTES DE COMECAR
@@ -38,10 +47,15 @@ ANTES DE COMECAR
 [ ] 4. Fechar tudo que for pesado (jogos, navegador com muitas abas) e dar duplo clique em:
         comparar.bat
         - Os modelos qwen3.5:9b, qwen3.5:4b e qwen3:8b ja devem estar instalados.
-          Se faltar algum, ele lista e pergunta "Baixar agora? (S/N)". Responder S.
+          Os SMART (gemma4:12b, gpt-oss:20b, qwen3-coder:30b) precisam ser baixados:
+          ele lista o que falta, o tamanho e pergunta "Baixar agora? (S/N)". Responder S.
+          Confira antes se ha cerca de 50 GB livres em disco.
         - Depois e so deixar rodando. Nao digita nada.
 
-        Versao curta (2 a 3 horas), se nao puder deixar a noite toda:
+        Para dividir em duas noites (recomendado):
+              noite 1:  comparar.bat --perfis fast
+              noite 2:  comparar.bat --perfis smart
+        Versao curta (2 a 3 horas):
               comparar.bat --perfis 9b,4b
 
 

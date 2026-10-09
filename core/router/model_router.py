@@ -8,6 +8,8 @@ from core.paths import REGISTRY_PATH
 
 # Troca o FAST só nesta execução, sem tocar no registry (usada pela comparação de modelos).
 FAST_MODEL_ENV = "LOCALAGENT_FAST_MODEL"
+# Idem para o SMART: define o modelo especialista só nesta execução (experimento de pareamento FAST+SMART).
+SMART_MODEL_ENV = "LOCALAGENT_SMART_MODEL"
 
 
 
@@ -86,6 +88,11 @@ class ModelRouter:
         Retorna o modelo SMART ativo, ou None se nenhum tiver sido adotado.
         O papel SMART é determinado pelo registry, não pelo tamanho do modelo.
         """
+        override = os.environ.get(SMART_MODEL_ENV, "").strip()
+
+        if override:
+            return override
+
         return self._data.get("active_smart_model") or None
 
     def route_task(self, prompt: str, current_phase: str | None = None) -> str | None:
@@ -246,6 +253,19 @@ class ModelRouter:
         Retorna: (is_available, motivo, diagnostic_dict)
         """
         smart_model = self.get_smart_model()
+
+        # Experimento: o SMART veio da variável de ambiente, não do registry. Só exige estar instalado.
+        if smart_model and os.environ.get(SMART_MODEL_ENV, "").strip():
+            if self.is_model_installed(smart_model, backend_checker=backend_checker):
+                return True, f"SMART definido por {SMART_MODEL_ENV} (experimento).", {
+                    "event": "SMART_AVAILABLE", "active_smart_model": smart_model, "is_installed": True, "source": "environment",
+                }
+
+            reason = f"O SMART '{smart_model}' (definido por {SMART_MODEL_ENV}) não está instalado."
+            return False, reason, {
+                "event": "SMART_UNAVAILABLE", "active_smart_model": smart_model, "is_installed": False,
+                "required_capability": "select_and_prepare_smart", "reason": reason,
+            }
 
         if not smart_model:
             reason = "Nenhum modelo SMART adotado como active_smart_model no Model Registry."

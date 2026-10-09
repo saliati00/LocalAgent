@@ -44,8 +44,26 @@ PROFILES = {
     "4b-16k-kv8": {"model": "qwen3.5:4b", "num_ctx": 16384, "server": KV8},
     "8b": {"model": "qwen3:8b", "num_ctx": 8192, "server": {}},
 }
-DEFAULT_PROFILES = ["9b", "4b", "9b-kv8", "4b-16k-kv8", "8b"]
-APPROX_DOWNLOAD_GB = {"qwen3:8b": 5.2, "qwen3.5:9b": 7.0, "qwen3.5:4b": 3.5}
+FAST_PROFILES = ["9b", "4b", "9b-kv8", "4b-16k-kv8", "8b"]
+
+# Candidatos a SMART. Rodam só os grupos difíceis (raciocínio, tarefas reais, tarefas numeradas), uma rodada
+# cada, com mais tempo por caso e por chamada (parte do modelo fica na CPU). O que importa é acertar, não a velocidade.
+SMART_BASE = {
+    "num_ctx": 8192, "server": KV8, "role": "smart", "grupos": "raciocinio,real,tarefas", "repeticoes": 1,
+    "timeout_factor": 3, "call_timeout": 600, "limite": 10800,
+}
+PROFILES.update({
+    "s-gemma12": {"model": "gemma4:12b", **SMART_BASE},
+    "s-gptoss20": {"model": "gpt-oss:20b", **SMART_BASE},
+    # Pareamento: o FAST (9b) tenta e, travado, entrega ao SMART com o resumo de passagem (handover).
+    "par-9b+gemma12": {"model": "qwen3.5:9b", "smart_model": "gemma4:12b", **{**SMART_BASE, "grupos": "real,tarefas"}},
+    "s-coder30": {"model": "qwen3-coder:30b", **SMART_BASE},
+})
+SMART_PROFILES = ["s-gemma12", "s-gptoss20", "par-9b+gemma12", "s-coder30"]
+DEFAULT_PROFILES = FAST_PROFILES + SMART_PROFILES
+PROFILE_GROUPS = {"fast": FAST_PROFILES, "smart": SMART_PROFILES, "tudo": DEFAULT_PROFILES}
+
+APPROX_DOWNLOAD_GB = {"qwen3:8b": 5.2, "qwen3.5:9b": 7.0, "qwen3.5:4b": 3.5, "gemma4:12b": 8.0, "gpt-oss:20b": 14.0, "qwen3-coder:30b": 19.0}
 MIN_ACCEPTABLE_TOK_S = 15
 SMOKE_TIMEOUT_SECONDS = 180
 MODEL_TIME_LIMIT_SECONDS = 6000
@@ -75,11 +93,16 @@ def resolve_profiles(args) -> list[dict]:
     if getattr(args, "modelos", ""):
         return [profile_from_model(m.strip()) for m in args.modelos.split(",") if m.strip()]
 
-    names = [n.strip() for n in (getattr(args, "perfis", "") or ",".join(DEFAULT_PROFILES)).split(",") if n.strip()]
+    names = []
+
+    for name in [n.strip() for n in (getattr(args, "perfis", "") or "tudo").split(",") if n.strip()]:
+        names += PROFILE_GROUPS.get(name, [name])
+
+    names = list(dict.fromkeys(names))
     unknown = [n for n in names if n not in PROFILES]
 
     if unknown:
-        raise SystemExit(f"Perfis desconhecidos: {', '.join(unknown)}. Disponíveis: {', '.join(PROFILES)}.")
+        raise SystemExit(f"Perfis desconhecidos: {', '.join(unknown)}. Disponíveis: {', '.join(PROFILES)}; grupos: {', '.join(PROFILE_GROUPS)}.")
 
     return [{"label": name, **PROFILES[name]} for name in names]
 
@@ -362,17 +385,26 @@ def build_comparison(entries: list[dict], date: str) -> str:
     profiled = [e for e in entries if e.get("profile")]
 
     if profiled:
-        lines += ["", "## Perfis testados", "", "| Perfil | Modelo | Contexto | Servidor |", "|---|---|---|---|"]
+        lines += ["", "## Perfis testados", "", "| Perfil | Papel | Modelo (SMART) | Contexto | Servidor | Grupos |", "|---|---|---|---|---|---|"]
 
         for e in profiled:
             p = e["profile"]
             server = ", ".join(f"{k}={v}" for k, v in p.get("server", {}).items()) or "padrão"
-            lines.append(f"| {e['label']} | {p['model']} | {p['num_ctx']} | {server} |")
+            model = p["model"] + (f" (SMART: {p['smart_model']})" if p.get("smart_model") else "")
+            lines.append(f"| {e['label']} | {p.get('role', 'fast')} | {model} | {p['num_ctx']} | {server} | {p.get('grupos') or 'todos'} |")
 
     lines += ["", "## Cabe na placa? (`ollama ps` logo após o primeiro caso)", ""]
 
     for s in summaries:
         lines += [f"**{s['label']}**", "", "```", s["ollama_ps"], "```", ""]
+
+    if any(e.get("profile", {}).get("role") == "smart" for e in entries):
+        lines += ["## Escolhendo o SMART", "",
+                  "- Os perfis `s-*` rodam só os grupos difíceis (raciocínio, tarefas reais e tarefas numeradas), uma rodada cada. Compare **entre eles** e com o melhor FAST nos mesmos grupos, não pela nota total.",
+                  "- O que decide: passar nas **tarefas reais** e na **tarefa 3** (casos `info`, veja a coluna de cada perfil em \"Caso a caso\"). Um SMART que não passa onde o FAST falha não serve.",
+                  "- A velocidade pesa pouco (ele só entra quando o FAST trava): 3 tokens/s ou mais é aceitável; CPU no `ollama ps` é esperado nos modelos grandes.",
+                  "- O perfil `par-*` testa o conjunto: veja `ESCALATE_TO_SMART` e `SMART_AVAILABLE` nos eventos. Se o FAST escalou e o caso passou, o pareamento funcionou.",
+                  ""]
 
     lines += ["## Como ler", "",
               "- Escolha o modelo com **maior aprovação** nos casos que contam (os `info` não entram).",
@@ -428,10 +460,14 @@ def wait_unloaded(model: str, seconds: int = UNLOAD_WAIT_SECONDS, url: str = DEF
 def run_one(profile: dict, folder: Path, args, resume: bool = False, url: str = DEFAULT_URL) -> bool:
     """Roda a bateria de um perfil. Devolve False se estourou o tempo (os resultados parciais ficam em disco)."""
 
-    command = [sys.executable, str(ROOT / "scripts" / "bateria.py"), "--saida", str(folder), "--repeticoes", str(args.repeticoes)]
+    command = [sys.executable, str(ROOT / "scripts" / "bateria.py"), "--saida", str(folder),
+               "--repeticoes", str(profile.get("repeticoes", args.repeticoes))]
 
     if args.rapido:
         command.append("--rapido")
+
+    if profile.get("grupos"):
+        command += ["--grupos", profile["grupos"]]
 
     if resume:
         command.append("--retomar")
@@ -441,21 +477,36 @@ def run_one(profile: dict, folder: Path, args, resume: bool = False, url: str = 
         "LOCALAGENT_FAST_MODEL": profile["model"], "LOCALAGENT_NUM_CTX": str(profile.get("num_ctx", 8192)),
         "LOCALAGENT_OLLAMA_URL": url, "OLLAMA_HOST": host_of(url), "PYTHONUTF8": "1",
     }
+
+    if profile.get("smart_model"):
+        env["LOCALAGENT_SMART_MODEL"] = profile["smart_model"]
+
+    if profile.get("timeout_factor"):
+        env["LOCALAGENT_TIMEOUT_FACTOR"] = str(profile["timeout_factor"])
+
+    if profile.get("call_timeout"):
+        env["LOCALAGENT_CALL_TIMEOUT"] = str(profile["call_timeout"])
+
+    limit = int(profile.get("limite", args.limite_modelo))
     finished = True
 
     try:
-        subprocess.run(command, env=env, cwd=str(ROOT), stdin=subprocess.DEVNULL, timeout=args.limite_modelo)
+        subprocess.run(command, env=env, cwd=str(ROOT), stdin=subprocess.DEVNULL, timeout=limit)
     except subprocess.TimeoutExpired:
         finished = False
-        print(f"\n!!! {profile['label']} passou de {args.limite_modelo // 60} min e foi interrompido; os resultados parciais foram mantidos.")
+        print(f"\n!!! {profile['label']} passou de {limit // 60} min e foi interrompido; os resultados parciais foram mantidos.")
     except OSError as exc:
         finished = False
         print(f"\n!!! Não consegui rodar a bateria de {profile['label']}: {exc}")
 
-    stop_model(profile["model"], url)
+    for loaded in dict.fromkeys([profile["model"], profile.get("smart_model")]):
+        if not loaded:
+            continue
 
-    if not wait_unloaded(profile["model"], url=url):
-        print(f"Aviso: {profile['model']} ainda aparece carregado; o próximo perfil pode usar CPU.")
+        stop_model(loaded, url)
+
+        if not wait_unloaded(loaded, url=url):
+            print(f"Aviso: {loaded} ainda aparece carregado; o próximo perfil pode usar CPU.")
 
     return finished
 
@@ -496,7 +547,7 @@ def orchestrate(args) -> int:
         return 1
 
     resume = bool(args.retomar)
-    models = list(dict.fromkeys(p["model"] for p in profiles))
+    models = list(dict.fromkeys(m for p in profiles for m in (p["model"], p.get("smart_model")) if m))
     missing = [m for m in models if not model_installed(m)]
 
     if not confirm_downloads(missing, args.sim):
@@ -605,7 +656,7 @@ def rebuild(folder: Path) -> int:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Compara modelos FAST com a mesma bateria")
-    parser.add_argument("--perfis", default="", help="perfis separados por vírgula (padrão: " + ",".join(DEFAULT_PROFILES) + ")")
+    parser.add_argument("--perfis", default="", help="perfis ou grupos (fast, smart, tudo) separados por vírgula (padrão: tudo = " + ",".join(DEFAULT_PROFILES) + ")")
     parser.add_argument("--modelos", default="", help="em vez de perfis: modelos separados por vírgula, com a configuração padrão")
     parser.add_argument("--base", help="pasta de uma bateria já feita (reaproveitada como coluna do modelo base)")
     parser.add_argument("--base-nome", default=BASE_LABEL, help="nome do modelo da rodada --base")

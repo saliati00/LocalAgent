@@ -1160,6 +1160,7 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [x] Tools por perfil: grupo base de 8 tools e grupos extras sob demanda (pronto quando: pytest tests/test_tool_profiles.py passa)
 * [x] Busca no código com a tool search_files (pronto quando: pytest tests/test_search_files.py passa)
 * [x] Backup automático antes de sobrescrever arquivos e script de restauração (pronto quando: pytest tests/test_backups.py passa)
+* [x] Candidatos a SMART na bateria (gemma4:12b, gpt-oss:20b, qwen3-coder:30b e o par 9b+gemma4:12b) com grupos difíceis, mais tempo e SMART por variável de ambiente (pronto quando: pytest tests/test_smart_profiles.py passa)
 * [x] Tarefas reais de desenvolvimento na bateria (10 mini-projetos com teste oculto, execução e teste de mutação) e perfis de teste com cache de KV quantizado e contexto maior (pronto quando: pytest tests/test_real_tasks.py tests/test_profiles.py passa)
 * [x] Segunda comparação real analisada: mkdir também em scripts/eval/ e caminhos com barra inicial lidos a partir do projeto (pronto quando: pytest tests/test_first_comparison_fixes.py passa)
 * [x] Bateria à prova de falhas: erro num caso não para os demais, Ollama reiniciado e caso repetido, falhas de infraestrutura fora da nota, gravação a cada caso, retomada e PC sem suspender (pronto quando: pytest tests/test_battery_robustness.py passa)
@@ -1539,7 +1540,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-559 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+577 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1920,3 +1921,16 @@ Até a segunda comparação o agente só tinha sido medido em testes sintéticos
 * **Usuário simulado que aprova:** só nesse grupo as confirmações recebem ENTER (para o agente poder rodar `python` e `pytest`); o Permission Manager continua barrando o que é proibido, os arquivos protegidos são conferidos por hash e os arquivos versionados são restaurados após cada caso.
 * **Perfis (modelo + contexto + servidor):** `9b`, `4b`, `9b-kv8`, `4b-16k-kv8` e `8b`. Os perfis com `OLLAMA_FLASH_ATTENTION=1` e `OLLAMA_KV_CACHE_TYPE=q8_0` rodam num servidor próprio do Ollama na porta 11435 (mesmos modelos, encerrado ao final), sem tocar no Ollama do usuário. `LOCALAGENT_NUM_CTX` muda a janela de contexto do agente (e o limite de compactação do histórico acompanha) e `LOCALAGENT_OLLAMA_URL` aponta o servidor.
 * **Hipóteses a verificar:** o cache de KV em 8 bits deve tirar o `9b` da CPU (hoje 12%) sem perder qualidade; o `4b` com 16 mil tokens deve aliviar o `CONTEXT_NEAR_LIMIT`. O relatório mostra o `ollama ps` de cada perfil para conferir.
+
+
+---
+
+# 55. CANDIDATOS A SMART NA BATERIA
+
+Decisão de 09/10/2026: o modelo SMART (que assume quando o FAST trava) deixa de ser uma decisão no escuro e passa a ser medido pela bateria. Disponibilidade conferida na biblioteca do Ollama no mesmo dia: `gemma4:12b` (7,7 a 8,0 GB, denso, ferramentas e raciocínio configurável), `gpt-oss:20b` (14 GB, MoE, ferramentas e raciocínio), `qwen3-coder:30b` (19 GB, MoE com 3,3B ativos, ferramentas) e, descartados por tamanho ou lentidão numa placa de 8 GB com 16 GB de RAM, `devstral:24b` (14 GB denso), `gemma4:26b` (MoE de 16 a 19 GB) e `qwen3.5:27b`/`35b`.
+
+* **Perfis SMART:** `s-gemma12`, `s-gptoss20` e `s-coder30` rodam o modelo como único modelo, só nos grupos difíceis (`raciocinio`, `real` e `tarefas`, que inclui a tarefa 3), uma rodada, com `LOCALAGENT_TIMEOUT_FACTOR=3` (tempo por caso), `LOCALAGENT_CALL_TIMEOUT=600` (tempo por chamada ao modelo, antes fixo em 120 s) e limite de 3 horas por perfil, no servidor com cache de KV quantizado.
+* **Perfil de pareamento:** `par-9b+gemma12` usa o `qwen3.5:9b` como FAST e o `gemma4:12b` como SMART via `LOCALAGENT_SMART_MODEL` (que dispensa o registro, mas exige o modelo instalado), só em `real` e `tarefas`. É o único teste do caminho de escalada e do resumo de passagem (handover) com modelos de verdade.
+* **Critério de escolha (no relatório):** passar nas tarefas reais e na tarefa 3, onde o FAST falha; velocidade só precisa ser de pelo menos ~3 tokens/s; CPU no `ollama ps` é esperada. Um SMART que não passa onde o FAST falha não serve.
+* **Ordem e custo:** FAST primeiro, SMART depois, o maior (`s-coder30`, perto do limite da RAM) por último. A rodada completa é estimada em 12 a 18 horas e pode ser dividida (`--perfis fast`, `--perfis smart`) e retomada (`--retomar`). Download estimado dos SMART: cerca de 41 GB.
+* **Limites conhecidos:** o `gpt-oss` pode não aceitar `think=False` (o teste rápido acusa e o perfil é pulado com o motivo); os tempos são estimativas sem medição; o pareamento usa o `qwen3.5:9b` mesmo que o 4b vença como FAST.

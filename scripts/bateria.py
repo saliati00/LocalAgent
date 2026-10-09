@@ -53,6 +53,19 @@ PROTECTED = [
 SNAPSHOT_MAX_BYTES = 2_000_000
 
 DEFAULT_TIMEOUT = 900
+
+
+def timeout_factor() -> float:
+    """Modelos lentos (SMART com parte na CPU) precisam de mais tempo por caso."""
+
+    try:
+        value = float(os.environ.get("LOCALAGENT_TIMEOUT_FACTOR", "").strip() or 1)
+    except ValueError:
+        return 1.0
+
+    return value if 1 <= value <= 10 else 1.0
+
+
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
 OLLAMA_WAIT_SECONDS = 90
 MAX_INFRA_RETRIES = 2
@@ -539,7 +552,7 @@ def ensure_ollama(wait_seconds: int = OLLAMA_WAIT_SECONDS) -> bool:
 
 
 def run_in_child_once(case_def: dict, attempt: int, folder: Path) -> dict:
-    limit = SLOW_TIMEOUT if case_def["slow"] else DEFAULT_TIMEOUT
+    limit = int((SLOW_TIMEOUT if case_def["slow"] else DEFAULT_TIMEOUT) * timeout_factor())
     env = {**os.environ, "PYTHONUTF8": "1"}
     started = time.time()
     transcript = folder / f"{case_def['id']}-{attempt}.txt"
@@ -720,6 +733,16 @@ def select_cases(args) -> list[dict]:
     elif args.rapido:
         chosen = [c for c in CASES if not c["slow"]]
 
+    groups = {g.strip() for g in (getattr(args, "grupos", "") or "").split(",") if g.strip()}
+
+    if groups:
+        known = {c["group"] for c in CASES}
+
+        if groups - known:
+            raise SystemExit(f"Grupos desconhecidos: {', '.join(sorted(groups - known))}. Disponíveis: {', '.join(sorted(known))}.")
+
+        chosen = [c for c in chosen if c["group"] in groups]
+
     return chosen
 
 
@@ -875,6 +898,7 @@ def main(argv=None) -> int:
     parser.add_argument("--rapido", action="store_true", help="pula as tarefas longas")
     parser.add_argument("--listar", action="store_true", help="lista os casos e sai")
     parser.add_argument("--so", help="ids separados por vírgula")
+    parser.add_argument("--grupos", help="só estes grupos de casos, separados por vírgula (ex.: raciocinio,real,tarefas)")
     parser.add_argument("--repeticoes", type=int, default=2, help="rodadas dos casos simples (padrão 2)")
     parser.add_argument("--saida", help="pasta de saída do relatório (padrão: logs/bateria/<data>)")
     parser.add_argument("--retomar", action="store_true", help="aproveita o que já está em --saida e roda só o que falta")

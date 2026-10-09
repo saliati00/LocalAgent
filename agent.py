@@ -58,9 +58,21 @@ from tools.terminal import check_constraints
 # Servidor e janela de contexto podem ser trocados só numa execução (comparação de configurações).
 OLLAMA_URL = os.environ.get("LOCALAGENT_OLLAMA_URL", "").strip() or "http://localhost:11434"
 
+
+
+def _float_from_environment(name: str, default: float) -> float:
+    try:
+        value = float(os.environ.get(name, "").strip() or default)
+    except ValueError:
+        return default
+
+    return value if 10 <= value <= 7200 else default
+
+
+# Modelos grandes com parte na CPU geram devagar; a comparação de SMARTs aumenta o tempo por chamada.
 client = ollama.Client(
     host=OLLAMA_URL,
-    timeout=120,
+    timeout=_float_from_environment("LOCALAGENT_CALL_TIMEOUT", 120),
 )
 
 
