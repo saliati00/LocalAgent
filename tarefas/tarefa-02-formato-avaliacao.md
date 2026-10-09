@@ -43,6 +43,9 @@ Escreva cada arquivo UMA vez, com EXATAMENTE estes nomes. Se já existirem, sobr
 ## Pode criar/alterar
 Somente `scripts/eval/` e `workspace/tarefa-02/`.
 
+## Dica
+`write_file` já cria as pastas que faltarem (`scripts/eval/tarefas/` inclusive): não precisa de `mkdir`.
+
 ## Não faça
 Não crie o programa que roda a avaliação (é a tarefa 03). Não use caminhos absolutos nem `..`. Não regrave arquivos que já estão certos.
 

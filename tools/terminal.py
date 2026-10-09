@@ -233,7 +233,7 @@ MKDIR_IGNORED_FLAGS = {"-p", "/p", "-parents", "--parents"}
 
 def _make_workspace_dirs(parts: list[str]) -> dict | None:
     """
-    mkdir/md só dentro de workspace/ é feito em Python e não pede confirmação. No Windows o
+    mkdir/md só dentro de workspace/ e scripts/eval/ é feito em Python e não pede confirmação. No Windows o
     mkdir é um comando interno do cmd e não roda com shell=False, e criar pasta ali é inofensivo.
     Qualquer outro caso devolve None e segue o fluxo normal (com confirmação).
     """
@@ -246,13 +246,13 @@ def _make_workspace_dirs(parts: list[str]) -> dict | None:
     if not targets or any(arg.startswith("-") for arg in targets):
         return None
 
-    workspace = WORKSPACE_DIR.resolve()
+    roots = [WORKSPACE_DIR.resolve(), (PROJECT_ROOT / "scripts" / "eval").resolve()]
     folders = []
 
     for arg in targets:
         folder = (PROJECT_ROOT / arg).resolve()
 
-        if folder != workspace and workspace not in folder.parents:
+        if not any(folder == root or root in folder.parents for root in roots):
             return None
 
         folders.append(folder)

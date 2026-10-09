@@ -143,8 +143,25 @@ def is_path_writable(target: Path) -> tuple[bool, str]:
     return True, ""
 
 
+def _read_target(path: str) -> Path:
+    """
+    Caminho de LEITURA. Modelos pequenos escrevem '/workspace/x' querendo dizer 'workspace/x' do projeto;
+    se o caminho absoluto não existe, tenta relativo à raiz do projeto (continua dentro do projeto).
+    """
+
+    target = Path(path).expanduser()
+
+    if not target.exists() and path[:1] in ("/", "\\") and path[:2] not in ("//", "\\\\"):
+        candidate = (PROJECT_ROOT / path.lstrip("/\\")).resolve()
+
+        if candidate.exists() and PROJECT_ROOT.resolve() in (candidate, *candidate.parents):
+            return candidate
+
+    return target.resolve()
+
+
 def list_directory(path: str) -> dict:
-    target = Path(path).expanduser().resolve()
+    target = _read_target(path)
 
     if not target.exists():
         return {
@@ -185,7 +202,7 @@ def read_file(
     start_line: int | None = None,
     end_line: int | None = None,
 ) -> dict:
-    target = Path(path).expanduser().resolve()
+    target = _read_target(path)
 
     if not target.exists():
         return {

@@ -1160,6 +1160,7 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [x] Tools por perfil: grupo base de 8 tools e grupos extras sob demanda (pronto quando: pytest tests/test_tool_profiles.py passa)
 * [x] Busca no código com a tool search_files (pronto quando: pytest tests/test_search_files.py passa)
 * [x] Backup automático antes de sobrescrever arquivos e script de restauração (pronto quando: pytest tests/test_backups.py passa)
+* [x] Segunda comparação real analisada: mkdir também em scripts/eval/ e caminhos com barra inicial lidos a partir do projeto (pronto quando: pytest tests/test_first_comparison_fixes.py passa)
 * [x] Bateria à prova de falhas: erro num caso não para os demais, Ollama reiniciado e caso repetido, falhas de infraestrutura fora da nota, gravação a cada caso, retomada e PC sem suspender (pronto quando: pytest tests/test_battery_robustness.py passa)
 * [x] Primeira comparação real analisada e corrigida: mkdir nativo no workspace, argumento reason tolerado, mais arquivos protegidos, conferências sem acento, restauração geral (pronto quando: pytest tests/test_first_comparison_fixes.py passa)
 * [x] Comparação de modelos FAST com a mesma bateria e relatório lado a lado (pronto quando: pytest tests/test_comparar_modelos.py passa)
@@ -1537,7 +1538,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-501 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+506 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1883,3 +1884,25 @@ Como só há uma rodada por dia no PC alvo, nenhum defeito de infraestrutura pod
 * **Troca limpa de modelo:** após cada modelo, `ollama stop` e espera de até 40 s até ele sair da memória (dois modelos juntos vazariam para a CPU); limite de 100 minutos por modelo, com os resultados parciais mantidos.
 * **Relatório nunca derruba a rodada:** `safe_report` devolve uma versão reduzida se o completo falhar; um modelo com erro inesperado é registrado como "pulado" e os demais continuam.
 * **Retomada:** `--retomar <pasta>` (bateria e comparação) aproveita o que já foi gravado, pula os modelos concluídos e roda só o que falta.
+
+
+---
+
+# 53. SEGUNDA COMPARAÇÃO REAL DE MODELOS (08/10/2026)
+
+Com a bateria corrigida (32 casos, 47 execuções, 44 contáveis; Ollama 0.40.1; 0 falhas de infraestrutura e 0 violações; nenhum arquivo versionado alterado), a comparação ficou nítida em raciocínio:
+
+| Modelo | Aprovação | Raciocínio | Simples | Segurança | Tarefas | tokens/s | VRAM |
+|---|---|---|---|---|---|---|---|
+| qwen3:8b | 35/44 (80%) | 5/12 | 19/20 | 8/8 | 3/4 | 68,9 | 6,2 GB, 100% GPU |
+| qwen3.5:9b | 40/44 (91%) | 11/12 | 19/20 | 8/8 | 2/4 | 50,9 | 6,4 GB, 12% CPU / 88% GPU |
+| qwen3.5:4b | 38/44 (86%) | 9/12 | 19/20 | 8/8 | 2/4 | 98,9 | 3,3 GB, 100% GPU |
+
+* **O `qwen3:8b` é o pior em raciocínio** (5/12): errou contas de um e dois passos (84 em vez de 75; 135 em vez de 170) e falhou 3 de 4 na multiplicação. Os dois Qwen3.5 são claramente melhores.
+* **Simples e segurança empatam nos três** (19/20 e 8/8), e nenhum modelo violou arquivo protegido ou alterou `opencode.json` (a proteção funcionou).
+* **A tarefa 2 falhou nos três** por um defeito do Harness: todos tentaram `mkdir -p scripts/eval/tarefas ...`, e o mkdir nativo só valia em `workspace/`, então o comando foi cancelado. Corrigido: `mkdir` também vale em `scripts/eval/`, e a tarefa avisa que `write_file` cria as pastas.
+* **Caminho com barra inicial:** o 4b usou `/workspace/bateria` e recebeu `C:\workspace\bateria`. Agora leituras (`list_directory`, `read_file`) tentam o caminho a partir da raiz do projeto quando o absoluto não existe.
+* **O 9b não cabe 100% na GPU** com contexto 8192 (6,4 GB), mas manteve ~50 tokens/s até nos casos pesados (entrada de 12 a 69 mil tokens somados), então o vazamento de 12% para a CPU não pesou nesta bateria.
+* **O 4b ocupa metade da VRAM** (3,3 GB) e roda a 99 tokens/s, o que deixa cerca de 4,5 GB livres para ampliar o contexto, hoje o limite mais apertado (`CONTEXT_NEAR_LIMIT`: 8b 2, 9b 4, 4b 1).
+* **Cancelamentos ainda tiram casos do 9b e do 4b:** os Qwen3.5 recorrem a `python -c`, `grep` e `dir`, que pedem confirmação, enquanto o 8b usa as ferramentas do projeto. Para um humano é só apertar ENTER; na bateria sem teclado o caso é cancelado.
+* **Decisão provisória:** descartar o `qwen3:8b` como FAST. Entre 9b (mais preciso) e 4b (mais rápido e com folga de VRAM) a escolha depende de testar contexto maior no 4b e cache de KV quantizado no 9b.

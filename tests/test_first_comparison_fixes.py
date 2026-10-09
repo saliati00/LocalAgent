@@ -160,3 +160,57 @@ def test_varios_arquivos_case_accepts_the_accented_answer(tmp_path, monkeypatch)
     case = next(c for c in bateria.CASES if c["id"] == "varios-arquivos")
 
     assert case["check"](SimpleNamespace(out=""))[0] is True
+
+
+# ---------------------------------------------------------
+# Segunda comparação: scripts/eval e barra inicial
+# ---------------------------------------------------------
+
+def test_mkdir_is_also_native_inside_scripts_eval(workspace, monkeypatch):
+    monkeypatch.setattr(terminal, "authorize", refuse_confirmation)
+
+    result = terminal.run_command("mkdir -p scripts/eval/tarefas workspace/tarefa-02", "criar estrutura")
+
+    assert result["success"] is True
+    assert (workspace / "scripts" / "eval" / "tarefas").is_dir()
+    assert (workspace / "workspace" / "tarefa-02").is_dir()
+
+
+def test_mkdir_in_other_script_folders_still_asks(workspace, monkeypatch):
+    monkeypatch.setattr(terminal, "authorize", lambda command, reason: False)
+
+    assert terminal.run_command("mkdir scripts/outra", "criar").get("cancelled") is True
+    assert terminal.run_command("mkdir scripts/eval/../outra", "criar").get("cancelled") is True
+
+
+def test_leading_slash_path_is_read_from_the_project_root(tmp_path, monkeypatch):
+    import tools.filesystem as filesystem
+
+    monkeypatch.setattr(filesystem, "PROJECT_ROOT", tmp_path)
+    (tmp_path / "workspace" / "bateria").mkdir(parents=True)
+    (tmp_path / "workspace" / "bateria" / "a.txt").write_text("um", encoding="utf-8")
+
+    listing = filesystem.list_directory("/workspace/bateria")
+    content = filesystem.read_file("/workspace/bateria/a.txt")
+
+    assert listing["success"] is True and "a.txt" in str(listing)
+    assert content["success"] is True and "um" in str(content)
+
+
+def test_leading_slash_fallback_cannot_escape_the_project(tmp_path, monkeypatch):
+    import tools.filesystem as filesystem
+
+    project = tmp_path / "projeto"
+    project.mkdir()
+    (tmp_path / "segredo.txt").write_text("fora", encoding="utf-8")
+    monkeypatch.setattr(filesystem, "PROJECT_ROOT", project)
+
+    result = filesystem.read_file("/../segredo.txt")
+
+    assert result["success"] is False
+
+
+def test_task_02_explains_that_write_file_creates_folders():
+    text = next((PROJECT_ROOT / "tarefas").glob("tarefa-02-*.md")).read_text(encoding="utf-8")
+
+    assert "write_file" in text and "mkdir" in text
