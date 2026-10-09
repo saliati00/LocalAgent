@@ -12,6 +12,7 @@ tempo limite. Ao final, o relatório fica em logs/bateria/<data>/RELATORIO.md.
 """
 
 import argparse
+import base64
 import contextlib
 import datetime
 import hashlib
@@ -51,6 +52,12 @@ PROTECTED = [
 
 # Tamanho máximo de um arquivo versionado guardado na memória para restauração no fim.
 SNAPSHOT_MAX_BYTES = 2_000_000
+
+# Marcas em disco para sobreviver a um travamento do PC (a memória do processo se perde, o disco não).
+INFLIGHT_FILE = "em-andamento.json"
+CRASHES_FILE = "quedas.json"
+SNAPSHOT_FILE = "snapshot-arquivos.json"
+MAX_CRASHES = 2
 
 DEFAULT_TIMEOUT = 900
 
@@ -647,6 +654,92 @@ def load_results(folder: Path) -> list[dict]:
         return []
 
 
+def mark_inflight(folder: Path, case_def: dict, attempt: int) -> None:
+    """Anota em disco qual caso está rodando. Se o PC travar, sobra este arquivo e a retomada sabe o que houve."""
+
+    try:
+        (folder / INFLIGHT_FILE).write_text(json.dumps({
+            "id": case_def["id"], "attempt": attempt, "group": case_def.get("group", "?"), "info": bool(case_def.get("info")),
+            "started": datetime.datetime.now().isoformat(timespec="seconds"),
+        }), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def clear_inflight(folder: Path) -> None:
+    try:
+        (folder / INFLIGHT_FILE).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def read_crashes(folder: Path) -> int:
+    try:
+        return int(json.loads((folder / CRASHES_FILE).read_text(encoding="utf-8")).get("count", 0))
+    except (OSError, ValueError, AttributeError, TypeError):
+        return 0
+
+
+def recover_interrupted(folder: Path, results: list[dict]) -> tuple[bool, int]:
+    """
+    Se a rodada anterior parou no meio de um caso (sobrou o marcador), registra esse caso como
+    interrompido (falha de infraestrutura: não conta contra o modelo) e soma uma queda ao perfil.
+    Devolve (houve_interrupcao, total_de_quedas).
+    """
+
+    marker = folder / INFLIGHT_FILE
+
+    if not marker.exists():
+        return False, read_crashes(folder)
+
+    try:
+        data = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = {}
+
+    crashes = read_crashes(folder) + 1
+
+    try:
+        (folder / CRASHES_FILE).write_text(json.dumps({"count": crashes}), encoding="utf-8")
+    except OSError:
+        pass
+
+    case_id, attempt = data.get("id", "?"), data.get("attempt", 1)
+
+    if not any(r.get("id") == case_id and r.get("attempt") == attempt for r in results):
+        result = failure_result({"id": case_id}, "interrompido: a rodada parou durante este caso (PC travou, reiniciou ou a janela foi fechada)",
+                                "interrompido", infra=True)
+        result.update(attempt=attempt, group=data.get("group", "?"), info=bool(data.get("info")), tracked_changed=[])
+        results.append(result)
+        save_results(folder, results)
+
+    clear_inflight(folder)
+
+    return True, crashes
+
+
+def git_head() -> str:
+    return run_cmd(["git", "-C", str(ROOT), "rev-parse", "HEAD"]).strip()
+
+
+def save_snapshot(folder: Path, snapshot: dict[str, bytes]) -> None:
+    """Guarda os arquivos versionados em disco: assim a retomada desfaz o que um travamento deixou para trás."""
+
+    try:
+        payload = {"head": git_head(), "files": {name: base64.b64encode(data).decode("ascii") for name, data in snapshot.items()}}
+        (folder / SNAPSHOT_FILE).write_text(json.dumps(payload), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def load_snapshot(folder: Path) -> tuple[str | None, dict[str, bytes]]:
+    try:
+        payload = json.loads((folder / SNAPSHOT_FILE).read_text(encoding="utf-8"))
+        return payload.get("head"), {name: base64.b64decode(text) for name, text in payload.get("files", {}).items()}
+    except (OSError, ValueError, AttributeError):
+        return None, {}
+
+
 def verdict_text(result: dict, info: bool) -> str:
     if result.get("infra") and not result.get("passed"):
         return "INFRA"
@@ -669,8 +762,13 @@ def run_plan(plan, folder: Path, results: list[dict], runner=None, restore=None,
 
         say(f"[{index}/{total}] {case_def['id']} (rodada {attempt}) ... ", end="", flush=True)
 
+        mark_inflight(folder, case_def, attempt)
+
         try:
             result = runner(case_def, attempt, folder)
+        except KeyboardInterrupt:
+            clear_inflight(folder)  # parada voluntária (Ctrl+C) não é queda do PC
+            raise
         except Exception as exc:  # noqa: BLE001 - o erro de um caso não pode derrubar a bateria
             result = failure_result(case_def, f"erro interno da bateria: {type(exc).__name__}: {exc}", "erro-interno")
 
@@ -687,6 +785,7 @@ def run_plan(plan, folder: Path, results: list[dict], runner=None, restore=None,
 
         results.append(result)
         save_results(folder, results)
+        clear_inflight(folder)
 
         note = f" [alterou arquivos versionados: {', '.join(result['tracked_changed'])}]" if result["tracked_changed"] else ""
         say(f"{verdict_text(result, case_def['info'])} ({result.get('seconds', 0)} s) {str(result.get('detail', ''))[:90]}{note}")
@@ -843,14 +942,43 @@ def orchestrate(args) -> int:
     folder = Path(args.saida) if args.saida else ROOT / "logs" / "bateria" / started_at.strftime("%Y%m%d_%H%M%S")
     folder.mkdir(parents=True, exist_ok=True)
 
-    backups = snapshot_tracked()
-
     plan = []
     for case_def in selected:
         repeats = args.repeticoes if case_def["repeat"] > 1 else 1
         plan += [(case_def, n + 1) for n in range(repeats)]
 
     results: list[dict] = load_results(folder) if args.retomar else []
+    backups = None
+
+    if args.retomar:
+        saved_head, saved = load_snapshot(folder)
+
+        if saved and saved_head and saved_head == git_head():
+            # Mesma versão do projeto de quando a bateria começou: desfaz o que o caso interrompido deixou.
+            backups = saved
+            undone = restore_changed(saved)
+
+            if undone:
+                print(f"Arquivos versionados alterados pela rodada interrompida foram restaurados: {', '.join(undone)}")
+        elif saved:
+            print("O projeto mudou desde o início desta bateria (git pull?); não vou restaurar arquivos antigos.")
+
+    if backups is None:
+        backups = snapshot_tracked()
+        save_snapshot(folder, backups)
+
+    interrupted, crashes = recover_interrupted(folder, results) if args.retomar else (False, 0)
+
+    if interrupted:
+        print(f"A rodada anterior parou no meio de um caso (queda {crashes} de {MAX_CRASHES} permitidas neste perfil).")
+
+    if crashes >= MAX_CRASHES:
+        reason = f"o PC travou ou reiniciou {crashes} vezes neste perfil (provável falta de memória); o perfil foi abandonado"
+        print(f"!!! {reason}.")
+        save_results(folder, results)
+        meta = {"model": current_fast_model(), "date": started_at.strftime("%d/%m/%Y %H:%M"), "abandoned": reason}
+        (folder / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        return 3
 
     if results:
         print(f"Retomando: {len(results)} execuções já feitas serão aproveitadas.")

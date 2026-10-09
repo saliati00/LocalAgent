@@ -69,6 +69,12 @@ SMOKE_TIMEOUT_SECONDS = 180
 MODEL_TIME_LIMIT_SECONDS = 6000
 UNLOAD_WAIT_SECONDS = 40
 
+# Vigia de memória: se a RAM livre ficar abaixo disto por vários ciclos seguidos, o perfil é abortado
+# antes que o Windows entre em paginação pesada e trave o PC.
+LOW_MEMORY_MB = 700
+LOW_MEMORY_POLLS = 4
+MEMORY_POLL_SECONDS = 5
+
 PING_TOOL = {
     "type": "function",
     "function": {
@@ -237,7 +243,13 @@ def collect(folder: Path, label: str | None = None) -> dict | None:
     if not isinstance(results, list):
         return None
 
-    return {"label": label or meta.get("model") or folder.name, "results": results, "meta": meta}
+    aborted = folder / "abortado.txt"
+    note = {"aborted": aborted.read_text(encoding="utf-8").strip()} if aborted.exists() else {}
+
+    if meta.get("abandoned"):
+        note["skipped"] = meta["abandoned"]
+
+    return {"label": label or meta.get("model") or folder.name, "results": results, "meta": meta, **note}
 
 
 def summarize_model(entry: dict) -> dict:
@@ -393,6 +405,12 @@ def build_comparison(entries: list[dict], date: str) -> str:
             model = p["model"] + (f" (SMART: {p['smart_model']})" if p.get("smart_model") else "")
             lines.append(f"| {e['label']} | {p.get('role', 'fast')} | {model} | {p['num_ctx']} | {server} | {p.get('grupos') or 'todos'} |")
 
+    interrupted = [e for e in entries if e.get("aborted")]
+
+    if interrupted:
+        lines += ["", "## ATENÇÃO: perfis interrompidos", ""]
+        lines += [f"- {e['label']}: {e['aborted']}" for e in interrupted]
+
     lines += ["", "## Cabe na placa? (`ollama ps` logo após o primeiro caso)", ""]
 
     for s in summaries:
@@ -457,6 +475,80 @@ def wait_unloaded(model: str, seconds: int = UNLOAD_WAIT_SECONDS, url: str = DEF
     return False
 
 
+def available_memory_mb() -> int | None:
+    """RAM física livre no Windows (None em outros sistemas ou se a consulta falhar)."""
+
+    if os.name != "nt":
+        return None
+
+    import ctypes
+
+    class MemoryStatus(ctypes.Structure):
+        _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong), ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong), ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong), ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong), ("sullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+    status = MemoryStatus()
+    status.dwLength = ctypes.sizeof(MemoryStatus)
+
+    try:
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
+    except Exception:  # noqa: BLE001
+        return None
+
+    return int(status.ullAvailPhys // (1024 * 1024))
+
+
+def kill_tree(process) -> None:
+    """Encerra o processo e os filhos (pytest, ollama...)."""
+
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True, timeout=30)
+        else:
+            process.kill()
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+    try:
+        process.kill()
+    except OSError:
+        pass
+
+
+def run_guarded(command, env, cwd, timeout, memory=None, popen=None, clock=None, poll=MEMORY_POLL_SECONDS) -> str:
+    """
+    Roda o processo vigiando tempo e memória. Devolve "ok", "timeout" ou "memoria". Se a RAM livre ficar
+    abaixo do mínimo por vários ciclos seguidos, mata a árvore de processos antes de o PC travar.
+    """
+
+    memory = memory or available_memory_mb
+    popen = popen or subprocess.Popen
+    clock = clock or time.time
+    process = popen(command, env=env, cwd=cwd, stdin=subprocess.DEVNULL)
+    deadline = clock() + timeout
+    low = 0
+
+    while True:
+        try:
+            process.wait(timeout=poll)
+            return "ok"
+        except subprocess.TimeoutExpired:
+            pass
+
+        if clock() > deadline:
+            kill_tree(process)
+            return "timeout"
+
+        free = memory()
+        low = low + 1 if free is not None and free < LOW_MEMORY_MB else 0
+
+        if low >= LOW_MEMORY_POLLS:
+            kill_tree(process)
+            return "memoria"
+
+
 def run_one(profile: dict, folder: Path, args, resume: bool = False, url: str = DEFAULT_URL) -> bool:
     """Roda a bateria de um perfil. Devolve False se estourou o tempo (os resultados parciais ficam em disco)."""
 
@@ -491,10 +583,17 @@ def run_one(profile: dict, folder: Path, args, resume: bool = False, url: str = 
     finished = True
 
     try:
-        subprocess.run(command, env=env, cwd=str(ROOT), stdin=subprocess.DEVNULL, timeout=limit)
-    except subprocess.TimeoutExpired:
-        finished = False
-        print(f"\n!!! {profile['label']} passou de {limit // 60} min e foi interrompido; os resultados parciais foram mantidos.")
+        outcome = run_guarded(command, env, str(ROOT), limit)
+
+        if outcome == "timeout":
+            finished = False
+            print(f"\n!!! {profile['label']} passou de {limit // 60} min e foi interrompido; os resultados parciais foram mantidos.")
+        elif outcome == "memoria":
+            finished = False
+            reason = f"a memória livre ficou abaixo de {LOW_MEMORY_MB} MB; o perfil foi interrompido antes de travar o PC"
+            print(f"\n!!! {profile['label']}: {reason}.")
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "abortado.txt").write_text(reason, encoding="utf-8")
     except OSError as exc:
         finished = False
         print(f"\n!!! Não consegui rodar a bateria de {profile['label']}: {exc}")
@@ -578,6 +677,12 @@ def orchestrate(args) -> int:
     return finish(entries, root)
 
 
+def has_progress(folder: Path) -> bool:
+    """Há algo de uma rodada anterior neste perfil (resultados, caso em andamento ou snapshot)?"""
+
+    return any((folder / name).exists() for name in ("resultados.json", "em-andamento.json", "snapshot-arquivos.json"))
+
+
 def run_model(profile: dict, root: Path, args, entries: list[dict], resume: bool, ensure) -> None:
     if isinstance(profile, str):
         profile = profile_from_model(profile)
@@ -615,7 +720,7 @@ def run_model(profile: dict, root: Path, args, entries: list[dict], resume: bool
                 return
 
             print(f"=== {label}: bateria completa ===")
-            run_one(profile, folder, args, resume=resume and (folder / "resultados.json").exists(), url=url)
+            run_one(profile, folder, args, resume=resume and has_progress(folder), url=url)
     except RuntimeError as exc:
         entries.append({"label": label, "results": [], "meta": {}, "profile": profile, "skipped": str(exc)})
         return

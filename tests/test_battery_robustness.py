@@ -317,10 +317,7 @@ def test_collect_survives_a_corrupt_results_file(tmp_path):
 def test_a_model_that_exceeds_its_time_limit_is_stopped_and_unloaded(tmp_path, monkeypatch):
     stopped = []
 
-    def slow(*a, **k):
-        raise subprocess.TimeoutExpired("bateria", 5)
-
-    monkeypatch.setattr(cmp.subprocess, "run", slow)
+    monkeypatch.setattr(cmp, "run_guarded", lambda *a, **k: "timeout")
     monkeypatch.setattr(cmp, "stop_model", lambda model, url=cmp.DEFAULT_URL: stopped.append(model))
     monkeypatch.setattr(cmp, "wait_unloaded", lambda model, seconds=40, url=cmp.DEFAULT_URL: True)
 
@@ -330,7 +327,7 @@ def test_a_model_that_exceeds_its_time_limit_is_stopped_and_unloaded(tmp_path, m
 
 def test_resume_flag_is_passed_to_the_battery(tmp_path, monkeypatch):
     seen = []
-    monkeypatch.setattr(cmp.subprocess, "run", lambda command, **k: seen.append(command))
+    monkeypatch.setattr(cmp, "run_guarded", lambda command, env, cwd, timeout, **k: seen.append(command) or "ok")
     monkeypatch.setattr(cmp, "stop_model", lambda model, url=cmp.DEFAULT_URL: None)
     monkeypatch.setattr(cmp, "wait_unloaded", lambda model, seconds=40, url=cmp.DEFAULT_URL: True)
 

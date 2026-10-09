@@ -68,6 +68,23 @@ CUIDADOS ENQUANTO RODA
 - Se algum caso falhar ou algum perfil for pulado: NAO mexer. O relatorio ja registra o motivo.
 
 
+SE O PC TRAVAR (tela congelada, tudo lento demais, precisou segurar o botao de ligar)
+- Reinicie o PC normalmente. Nao precisa apagar nada.
+- Abra o Prompt de Comando na pasta LocalAgent e rode, com o NOME da pasta que a rodada criou
+  (dir logs\comparacao mostra):
+        comparar.bat --retomar logs\comparacao\NOME_DA_PASTA
+- O que o programa faz sozinho ao retomar:
+    * aproveita tudo que ja tinha rodado (cada caso e gravado no disco assim que termina);
+    * marca o caso que estava rodando como "interrompido" (nao conta contra o modelo);
+    * DESFAZ qualquer arquivo do projeto que o agente tivesse alterado antes de travar;
+    * se o MESMO perfil travar o PC 2 vezes, ele e ABANDONADO e aparece como "NAO RODOU" no
+      relatorio (quase sempre e falta de memoria, tipico do qwen3-coder:30b). Os outros seguem.
+- Durante a rodada ele tambem vigia a memoria: se a RAM livre cair abaixo de 700 MB por uns
+  20 segundos, ele encerra aquele perfil ANTES de o PC travar e anota o motivo no relatorio.
+- Se o PC travar com frequencia, nao insista: rode so os perfis menores, por exemplo
+        comparar.bat --retomar logs\comparacao\NOME_DA_PASTA --perfis fast,s-gemma12
+
+
 SE A RODADA PARAR NO MEIO (queda de luz, PC reiniciou, fechou a janela sem querer)
 - Nao comece do zero. Rode de novo apontando para a pasta que ja foi criada:
         comparar.bat --retomar logs\comparacao\NOME_DA_PASTA

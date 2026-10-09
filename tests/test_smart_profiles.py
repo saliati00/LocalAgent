@@ -73,10 +73,11 @@ def test_download_sizes_are_known_for_every_model_of_every_profile():
 def run_one_env(profile, tmp_path, monkeypatch):
     seen = {"stopped": []}
 
-    def fake_run(command, **kwargs):
-        seen["command"], seen["env"], seen["timeout"] = command, kwargs["env"], kwargs["timeout"]
+    def fake_guarded(command, env, cwd, timeout, **kwargs):
+        seen["command"], seen["env"], seen["timeout"] = command, env, timeout
+        return "ok"
 
-    monkeypatch.setattr(cmp.subprocess, "run", fake_run)
+    monkeypatch.setattr(cmp, "run_guarded", fake_guarded)
     monkeypatch.setattr(cmp, "stop_model", lambda model, url=cmp.DEFAULT_URL: seen["stopped"].append(model))
     monkeypatch.setattr(cmp, "wait_unloaded", lambda model, seconds=40, url=cmp.DEFAULT_URL: True)
 

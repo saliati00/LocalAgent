@@ -164,7 +164,7 @@ def test_a_variant_that_cannot_start_becomes_a_skipped_profile_and_the_others_co
 
 def test_run_one_passes_model_context_server_url_and_kv_settings_to_the_battery(tmp_path, monkeypatch):
     seen = {}
-    monkeypatch.setattr(cmp.subprocess, "run", lambda command, **kwargs: seen.update(env=kwargs["env"]))
+    monkeypatch.setattr(cmp, "run_guarded", lambda command, env, cwd, timeout, **k: seen.update(env=env) or "ok")
     monkeypatch.setattr(cmp, "stop_model", lambda model, url=cmp.DEFAULT_URL: seen.update(stopped_on=url))
     monkeypatch.setattr(cmp, "wait_unloaded", lambda model, seconds=40, url=cmp.DEFAULT_URL: True)
     profile = {"label": "4b-16k-kv8", "model": "qwen3.5:4b", "num_ctx": 16384, "server": cmp.KV8}

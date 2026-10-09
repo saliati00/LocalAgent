@@ -1160,6 +1160,7 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [x] Tools por perfil: grupo base de 8 tools e grupos extras sob demanda (pronto quando: pytest tests/test_tool_profiles.py passa)
 * [x] Busca no código com a tool search_files (pronto quando: pytest tests/test_search_files.py passa)
 * [x] Backup automático antes de sobrescrever arquivos e script de restauração (pronto quando: pytest tests/test_backups.py passa)
+* [x] Recuperação de travamento do PC: caso em andamento em disco, snapshot dos arquivos versionados em disco, perfil abandonado após 2 quedas e vigia de memória (pronto quando: pytest tests/test_crash_recovery.py passa)
 * [x] Candidatos a SMART na bateria (gemma4:12b, gpt-oss:20b, qwen3-coder:30b e o par 9b+gemma4:12b) com grupos difíceis, mais tempo e SMART por variável de ambiente (pronto quando: pytest tests/test_smart_profiles.py passa)
 * [x] Tarefas reais de desenvolvimento na bateria (10 mini-projetos com teste oculto, execução e teste de mutação) e perfis de teste com cache de KV quantizado e contexto maior (pronto quando: pytest tests/test_real_tasks.py tests/test_profiles.py passa)
 * [x] Segunda comparação real analisada: mkdir também em scripts/eval/ e caminhos com barra inicial lidos a partir do projeto (pronto quando: pytest tests/test_first_comparison_fixes.py passa)
@@ -1540,7 +1541,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-577 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+600 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1934,3 +1935,17 @@ Decisão de 09/10/2026: o modelo SMART (que assume quando o FAST trava) deixa de
 * **Critério de escolha (no relatório):** passar nas tarefas reais e na tarefa 3, onde o FAST falha; velocidade só precisa ser de pelo menos ~3 tokens/s; CPU no `ollama ps` é esperada. Um SMART que não passa onde o FAST falha não serve.
 * **Ordem e custo:** FAST primeiro, SMART depois, o maior (`s-coder30`, perto do limite da RAM) por último. A rodada completa é estimada em 12 a 18 horas e pode ser dividida (`--perfis fast`, `--perfis smart`) e retomada (`--retomar`). Download estimado dos SMART: cerca de 41 GB.
 * **Limites conhecidos:** o `gpt-oss` pode não aceitar `think=False` (o teste rápido acusa e o perfil é pulado com o motivo); os tempos são estimativas sem medição; o pareamento usa o `qwen3.5:9b` mesmo que o 4b vença como FAST.
+
+
+---
+
+# 56. TRAVAMENTO DO PC
+
+Um congelamento total não deixa o programa agir: nada em memória sobrevive. A bateria, portanto, passa a deixar em disco tudo de que a retomada precisa, e a tentar evitar o travamento por falta de memória, a causa mais provável com modelos grandes (`qwen3-coder:30b` com 19 GB numa máquina de 16 GB).
+
+* **Marcador de caso em andamento** (`em-andamento.json`): escrito antes de cada caso e apagado depois. Se sobrar na retomada, o caso vira um resultado `interrompido` (falha de infraestrutura: não conta contra o modelo) e soma uma queda ao perfil (`quedas.json`). Ctrl+C e exceções não deixam o marcador, para não serem confundidos com queda.
+* **Snapshot em disco** (`snapshot-arquivos.json`): os arquivos versionados e o hash do commit no início da bateria. Na retomada, se o `HEAD` é o mesmo, os arquivos alterados pelo caso interrompido são restaurados; se o projeto mudou (por exemplo `git pull`), nada é restaurado e o usuário é avisado, para não desfazer código novo.
+* **Disjuntor:** o perfil que interrompe a rodada `MAX_CRASHES` = 2 vezes é abandonado (`meta.json` com `abandoned`) e aparece como "NÃO RODOU" no comparativo, em vez de travar o PC em laço.
+* **Vigia de memória** (`run_guarded`): consulta a RAM livre (`GlobalMemoryStatusEx`) a cada 5 s; abaixo de 700 MB por 4 ciclos seguidos encerra a árvore de processos (`taskkill /T /F`) antes da paginação pesada, descarrega o modelo e grava `abortado.txt`, que o relatório destaca em "perfis interrompidos". O mesmo laço aplica o limite de tempo do perfil.
+* **Retomada em dois níveis:** `comparar.bat --retomar <pasta>` aproveita perfis concluídos e continua o perfil parcial (inclusive se o travamento foi no primeiro caso, quando só existem o marcador e o snapshot).
+* **Limites:** se o PC congelar tão fundo que o próprio vigia não rode, a proteção é a retomada, não a prevenção; a leitura de memória só existe no Windows; 700 MB e 20 s são valores iniciais sem calibração.
