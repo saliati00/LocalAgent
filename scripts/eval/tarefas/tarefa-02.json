@@ -1,0 +1,20 @@
+{
+  "id": "resumo-arquivo",
+  "titulo": "Resumir um arquivo em uma linha",
+  "prompt": "Leia workspace/eval/leiame.txt e grave em workspace/eval/resumo.txt um resumo de uma linha que cite a palavra café.",
+  "setup": {
+    "workspace/eval/leiame.txt": "O café da manhã da equipe acontece toda sexta às 9h na copa. Cada pessoa leva um item para dividir."
+  },
+  "aceite": [
+    {
+      "type": "file_exists",
+      "path": "workspace/eval/resumo.txt"
+    },
+    {
+      "type": "file_contains",
+      "path": "workspace/eval/resumo.txt",
+      "text": "café"
+    }
+  ],
+  "max_iteracoes": 10
+}

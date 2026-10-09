@@ -42,7 +42,10 @@ def test_memory_store_format_context(tmp_path):
     assert "MEMÓRIA PERSISTENTE DO AGENTE" in ctx
     assert "cmake: 4.4.3" in ctx
     assert "Compilador cmake instalado no .venv" in ctx
-    assert "Harness proprio adotado" in ctx
+    assert "Harness proprio adotado" not in ctx, "decisão ainda não revisada não entra no prompt"
+
+    assert store.review("harness", approve=True) is True
+    assert "Harness proprio adotado" in store.format_context()
 
 
 def test_memory_store_clear_category(tmp_path):

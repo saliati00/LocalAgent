@@ -64,6 +64,7 @@ PROTECTED_PATHS = [
     (PROJECT_ROOT / "scripts" / "bateria.py").resolve(),
     (PROJECT_ROOT / "scripts" / "comparar_modelos.py").resolve(),
     (PROJECT_ROOT / "scripts" / "tarefas_reais.py").resolve(),
+    (PROJECT_ROOT / "scripts" / "revisar_memoria.py").resolve(),
     (PROJECT_ROOT / "scripts" / "check_ollama.py").resolve(),
     (PROJECT_ROOT / "scripts" / "restaurar.py").resolve(),
     (PROJECT_ROOT / "scripts" / "summarize_logs.py").resolve(),

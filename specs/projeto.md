@@ -1172,11 +1172,11 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [x] Bateria automática de testes no PC alvo: 32 casos sem teclado, relatório único e restauração dos arquivos (pronto quando: pytest tests/test_bateria.py passa)
 * [x] Aceite executável nas tarefas numeradas: o Harness roda o teste de aceite no lugar do juiz LLM (pronto quando: pytest tests/test_real_log_fixes.py passa)
 * [x] Primeira rodada real medida: velocidade, tokens por segundo e calibração da estimativa de tokens (pronto quando: capítulo 48 da spec registra os números do log de 07/10/2026)
-* [ ] Criar o conjunto de avaliação com 10 a 20 tarefas reais e critério de aceite executável (tarefas 02 e 03 em tarefas/; pronto quando: pytest -m aceite tests/test_aceite_tarefa02.py tests/test_aceite_tarefa03.py passa e o runner imprime a taxa de sucesso)
+* [x] Criar o conjunto de avaliação com 10 a 20 tarefas reais e critério de aceite executável (tarefas 02 e 03 em tarefas/; pronto quando: pytest -m aceite tests/test_aceite_tarefa02.py tests/test_aceite_tarefa03.py passa e o runner imprime a taxa de sucesso)
 * [ ] [humano] Medir no PC alvo o consumo real do prompt e mantê-lo abaixo de 60% da janela (pronto quando: PROMPT_SIZES de 10 tarefas reais mostram est_tokens total menor que 0,6 de NUM_CTX)
 * [ ] [humano] Comparar FAST sozinho, FAST com think, SMART sozinho e cascata com o conjunto de avaliação (pronto quando: a tabela de resultados está registrada em specs/avaliacoes.md)
-* [ ] [humano] Substituir o juiz de conclusão por LLM por critério de aceite executável nas tarefas de desenvolvimento (pronto quando: a tarefa só conclui se o comando de aceite retornar 0)
-* [ ] [humano] Limitar e revisar a memória persistente (pronto quando: save_memory recusa valores acima do limite e entradas de decisão exigem revisão)
+* [x] [humano] Substituir o juiz de conclusão por LLM por critério de aceite executável nas tarefas de desenvolvimento (pronto quando: a tarefa só conclui se o comando de aceite retornar 0)
+* [x] [humano] Limitar e revisar a memória persistente (pronto quando: save_memory recusa valores acima do limite e entradas de decisão exigem revisão)
 
 ---
 
@@ -1543,7 +1543,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-662 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+698 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1967,3 +1967,14 @@ Os logs das duas primeiras comparações não tinham telemetria de consumo: só 
 * **Previsão para os candidatos a SMART (RTX 3070 8 GB, 16 GB de RAM):** `gemma4:12b` parcial (15% na CPU, ~14 tok/s), `gpt-oss:20b` parcial (50% na CPU, ~19 tok/s), `gemma4:26b` parcial (62%, ~14 tok/s), `devstral:24b` inviável (~3 tok/s) e `qwen3-coder:30b` **não cabe** nos ~11 GB de RAM utilizáveis (risco de paginar e travar). A rodada confere ou desmente cada um, e o monitor de consumo passa a medir de verdade.
 * **Nada anotado à mão (regra):** tudo o que o usuário precisaria informar sai em `logs/`. A versão do Ollama, a GPU, o driver, a RAM, o disco livre, o plano de energia e os modelos instalados vão para `maquina.txt`; o que apareceu no terminal (perguntas, avisos, progresso e mensagens de erro, inclusive a saída de cada bateria) vai para `console.txt`; uma exceção inesperada do comparador vai para `logs/comparar-erro.txt`; o final dos logs do próprio Ollama (`server.log`, `app.log`) é copiado para `ollama-server.log` e `ollama-app.log`; a instalação grava `logs/instalacao.log`; e a tela de confirmação, que antes dependia de o usuário dizer se saiu legível, é verificada pelo caso `tela-de-confirmacao` (roda a tela num console cp1252 e num utf-8, sem teclado, e confere que ela aparece inteira e cancela). O que continua sem como automatizar: a aparência visual da tela num console real.
 * **Tudo em `logs/`:** a pasta que o usuário compacta e envia para análise. Além de `agent.log`, `comparacao/<data>/` (resultados, relatório, `consumo.csv` por perfil, `servidor-ollama.log`, marcadores de retomada) e `maquina.txt` (ficha da máquina: GPU, driver, RAM, versão do Ollama, modelos, commit), a estimativa de desempenho é gravada em `logs/estimativa-desempenho.txt`.
+
+
+---
+
+# 58. FASE 11: CONJUNTO DE AVALIAÇÃO, ACEITE EXECUTÁVEL NO CHECKLIST E MEMÓRIA LIMITADA
+
+Três itens da FASE 11 fechados em 09/10/2026, escritos pelo desenvolvedor porque nenhum modelo local (8B, 9B e 4B) conseguiu fazer a tarefa 3.
+
+* **Conjunto de avaliação:** `scripts/eval/` (formato em `FORMATO.md`, cinco tarefas em `tarefas/` e `runner.py` com `load_tasks`, `check_acceptance` e `summarize`). O runner confere os critérios por código, sem modelo, recusa caminhos absolutos, com unidade ou com `..`, roda comandos sem shell e imprime a taxa de sucesso (`python scripts/eval/runner.py`). Os 18 testes de aceite das tarefas 2 e 3 passam. As tarefas reais de desenvolvimento medidas contra modelos ficam na bateria (capítulo 54).
+* **Aceite executável no checklist:** `update_spec_checklist` só marca um item quando o comando do seu "pronto quando" (um `pytest tests/...` com as opções `-m aceite` e `-q`) retorna 0. O texto completo do item é buscado no `specs/projeto.md`, porque o modelo costuma citar só um trecho. Itens sem comando executável seguem as regras anteriores, e os `[humano]` continuam só do usuário.
+* **Memória limitada e revisada:** chave de até 60 caracteres, valor de até 400, descrição de até 160 e no máximo 40 entradas por categoria; acima disso `save_memory` recusa com a razão. Decisões entram marcadas como não revisadas e só vão para o prompt depois que o usuário as aprova com `python scripts/revisar_memoria.py` (`aprovar CHAVE` ou `rejeitar CHAVE`); entradas antigas, sem o campo, contam como revisadas. Uma decisão pendente também não vale como evidência na escolha de um SMART.

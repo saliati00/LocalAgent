@@ -1,0 +1,18 @@
+{
+  "id": "arquivo-simples",
+  "titulo": "Criar um arquivo de texto",
+  "prompt": "Crie o arquivo workspace/eval/ola.txt com o texto oi.",
+  "setup": {},
+  "aceite": [
+    {
+      "type": "file_exists",
+      "path": "workspace/eval/ola.txt"
+    },
+    {
+      "type": "file_contains",
+      "path": "workspace/eval/ola.txt",
+      "text": "oi"
+    }
+  ],
+  "max_iteracoes": 10
+}

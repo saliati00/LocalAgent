@@ -72,10 +72,15 @@ def extract_project_progress(path: str) -> dict:
                 "item": item,
             })
 
-    next_action = pending[0] if pending else None
+    # Itens marcados [humano] só o usuário conclui (medição no PC dele): o agente não pode "continuar" neles.
+    # A próxima ação é o primeiro item que o agente pode fazer; se só restarem os humanos, é o primeiro deles.
+    human_pending = [entry for entry in pending if entry["item"].lower().startswith("[humano]")]
+    actionable = [entry for entry in pending if entry not in human_pending]
+    next_action = actionable[0] if actionable else (pending[0] if pending else None)
 
     return {
         "success": True,
+        "human_pending": human_pending,
         "current_phase": (
             next_action["phase"]
             if next_action

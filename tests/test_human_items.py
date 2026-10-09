@@ -20,8 +20,33 @@ def test_regular_items_are_not_affected_by_the_human_rule():
     assert accepted is True
 
 
-def test_first_pending_item_of_phase_11_is_doable_by_the_agent():
+def test_the_next_action_is_never_a_human_item_while_the_agent_has_something_to_do():
     progress = extract_project_progress(str(PROJECT_SPEC_PATH))
+    doable = [entry for entry in progress["pending"] if entry not in progress["human_pending"]]
 
-    assert progress["current_phase"].startswith("FASE 11")
+    assert progress["human_pending"], "os itens [humano] da FASE 11 continuam pendentes"
+    assert doable, "ainda há itens que o agente pode fazer"
     assert not progress["next_action"].lower().startswith("[humano]")
+    assert progress["next_action"] == doable[0]["item"]
+
+
+def test_human_items_are_skipped_even_when_they_come_first(tmp_path):
+    spec = tmp_path / "projeto.md"
+    spec.write_text(
+        "## FASE 1 — TESTE\n* [ ] [humano] Medir no PC\n* [ ] Escrever o módulo\n\n## FASE 2 — OUTRA\n* [ ] Outra coisa\n",
+        encoding="utf-8",
+    )
+
+    progress = extract_project_progress(str(spec))
+
+    assert progress["next_action"] == "Escrever o módulo" and progress["current_phase"].startswith("FASE 1")
+    assert [entry["item"] for entry in progress["human_pending"]] == ["[humano] Medir no PC"]
+
+
+def test_when_only_human_items_remain_the_first_of_them_is_reported(tmp_path):
+    spec = tmp_path / "projeto.md"
+    spec.write_text("## FASE 1 — TESTE\n* [ ] [humano] Medir no PC\n* [x] Feito\n", encoding="utf-8")
+
+    progress = extract_project_progress(str(spec))
+
+    assert progress["next_action"] == "[humano] Medir no PC"

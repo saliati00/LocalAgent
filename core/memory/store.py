@@ -8,6 +8,12 @@ from core.paths import MEMORY_DIR
 DEFAULT_MEMORY_DIR = MEMORY_DIR
 DEFAULT_MEMORY_FILE = DEFAULT_MEMORY_DIR / "store.json"
 
+# Limites da memória persistente: ela entra no prompt de uma janela pequena, então precisa ser enxuta.
+MAX_KEY_CHARS = 60
+MAX_VALUE_CHARS = 400
+MAX_DESCRIPTION_CHARS = 160
+MAX_ENTRIES_PER_CATEGORY = 40
+
 
 class MemoryStore:
     """
@@ -71,25 +77,82 @@ class MemoryStore:
         description: str = "",
     ) -> dict:
         cat_key = category.strip().lower()
+        clean_key = key.strip()
+        text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+
+        refusal = None
+
+        if not clean_key:
+            refusal = "A chave da memória não pode ser vazia."
+        elif len(clean_key) > MAX_KEY_CHARS:
+            refusal = f"A chave tem {len(clean_key)} caracteres; o limite é {MAX_KEY_CHARS}. Use um nome curto."
+        elif len(text) > MAX_VALUE_CHARS:
+            refusal = (
+                f"O valor tem {len(text)} caracteres; o limite é {MAX_VALUE_CHARS}. A memória entra no prompt de uma janela pequena: "
+                "guarde só o fato essencial (o resto vai em arquivo)."
+            )
+        elif len(description.strip()) > MAX_DESCRIPTION_CHARS:
+            refusal = f"A descrição tem {len(description.strip())} caracteres; o limite é {MAX_DESCRIPTION_CHARS}."
+        elif clean_key not in self._data.get(cat_key, {}) and len(self._data.get(cat_key, {})) >= MAX_ENTRIES_PER_CATEGORY:
+            refusal = (
+                f"A categoria '{cat_key}' já tem {MAX_ENTRIES_PER_CATEGORY} entradas (o máximo). "
+                "Apague entradas antigas antes de guardar novas."
+            )
+
+        if refusal:
+            return {"success": False, "error": refusal, "tool_error": True}
+
         if cat_key not in self._data:
             self._data[cat_key] = {}
 
         now = datetime.now().isoformat()
         entry = {
-            "key": key.strip(),
+            "key": clean_key,
             "value": value,
             "description": description.strip(),
             "updated_at": now,
         }
 
-        self._data[cat_key][key.strip()] = entry
+        # Decisões moldam o comportamento futuro: só entram no contexto depois que o USUÁRIO as revisa.
+        if cat_key == "decisions":
+            entry["reviewed"] = False
+
+        self._data[cat_key][clean_key] = entry
         self.save()
-        return {
+        result = {
             "success": True,
             "category": cat_key,
-            "key": key.strip(),
+            "key": clean_key,
             "entry": entry,
         }
+
+        if cat_key == "decisions":
+            result["notice"] = (
+                "Decisão registrada, mas AGUARDA REVISÃO do usuário: só entra no contexto depois de aprovada "
+                "(python scripts\\revisar_memoria.py)."
+            )
+
+        return result
+
+    def pending_review(self) -> list[dict]:
+        """Decisões ainda não revisadas pelo usuário (entradas antigas, sem o campo, contam como revisadas)."""
+
+        return [item for item in self._data.get("decisions", {}).values() if not item.get("reviewed", True)]
+
+    def review(self, key: str, approve: bool) -> bool:
+        """Aprova (passa a valer no contexto) ou rejeita (apaga) uma decisão pendente."""
+
+        entry = self._data.get("decisions", {}).get(key.strip())
+
+        if entry is None:
+            return False
+
+        if approve:
+            entry["reviewed"] = True
+            self.save()
+            return True
+
+        return self.delete("decisions", key)
 
     def get(self, category: str, key: str, default: Any = None) -> Any:
         cat_key = category.strip().lower()
@@ -154,6 +217,9 @@ class MemoryStore:
 
             for cat in cats_to_include:
                 for k, item in self._data.get(cat, {}).items():
+                    if not item.get("reviewed", True):
+                        continue
+
                     candidates.append((item.get("updated_at") or "", cat, k, self._format_entry(k, item)))
 
             candidates.sort(key=lambda row: row[0], reverse=True)
@@ -177,6 +243,9 @@ class MemoryStore:
 
             lines = [f"[{cat.upper()}]:"]
             for k, item in entries.items():
+                if not item.get("reviewed", True):
+                    continue  # decisão pendente de revisão não vai para o prompt
+
                 if allowed is not None and (cat, k) not in allowed:
                     continue
 

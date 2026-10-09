@@ -1,0 +1,18 @@
+{
+  "id": "verificar-ferramenta",
+  "titulo": "Verificar uma ferramenta e registrar o resultado",
+  "prompt": "Verifique com check_tools se o git está instalado e grave o resultado em workspace/eval/ferramenta.txt.",
+  "setup": {},
+  "aceite": [
+    {
+      "type": "file_exists",
+      "path": "workspace/eval/ferramenta.txt"
+    },
+    {
+      "type": "file_contains",
+      "path": "workspace/eval/ferramenta.txt",
+      "text": "git"
+    }
+  ],
+  "max_iteracoes": 10
+}

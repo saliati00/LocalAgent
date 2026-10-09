@@ -1,7 +1,16 @@
 import json
+import re
+import subprocess
+import sys
 from pathlib import Path
 
-from core.paths import MEMORY_STORE_PATH, PROJECT_SPEC_PATH, REGISTRY_PATH
+from core.paths import MEMORY_STORE_PATH, PROJECT_ROOT, PROJECT_SPEC_PATH, REGISTRY_PATH
+
+# O que decide que um item do checklist está pronto é o comando do seu "pronto quando", não a opinião de um modelo.
+ITEM_ACCEPTANCE_PATTERN = re.compile(r"pronto quando:\s*(.+)", re.IGNORECASE)
+PYTEST_COMMAND_PATTERN = re.compile(r"pytest((?:\s+(?:-m\s+aceite|-q))*)((?:\s+tests/[\w./-]+\.py)+)")
+ITEM_ACCEPTANCE_TIMEOUT_SECONDS = 600
+CHECKLIST_LINE = re.compile(r"^\*\s+\[[ xX]\]\s+(.*)$")
 
 
 
@@ -24,6 +33,71 @@ def _is_valid_smart_candidate(candidate_name: str) -> tuple[bool, str | None]:
                 f"Modelos alucinados conhecidos: {', '.join(sorted(INVALID_HALLUCINATED_MODELS))}."
             )
     return True, None
+
+
+def full_checklist_item(item: str, project_spec_path=PROJECT_SPEC_PATH) -> str:
+    """O texto completo da linha do checklist que contém `item` (o modelo costuma citar só um trecho)."""
+
+    wanted = (item or "").strip().lower()
+
+    if not wanted:
+        return item or ""
+
+    try:
+        for line in Path(project_spec_path).read_text(encoding="utf-8").splitlines():
+            match = CHECKLIST_LINE.match(line.strip())
+
+            if match and wanted in match.group(1).lower():
+                return match.group(1)
+    except OSError:
+        pass
+
+    return item
+
+
+def extract_item_acceptance(item_text: str) -> list[str] | None:
+    """
+    Comando de aceite de um item do checklist: o `pytest tests/test_x.py ...` declarado depois de
+    "pronto quando:". Só aceita arquivos em tests/ e as opções `-m aceite` e `-q`; qualquer outra coisa vira None.
+    """
+
+    declared = ITEM_ACCEPTANCE_PATTERN.search(item_text or "")
+
+    if not declared:
+        return None
+
+    command = PYTEST_COMMAND_PATTERN.search(declared.group(1))
+
+    if not command:
+        return None
+
+    files = command.group(2).split()
+
+    if any(".." in name.split("/") for name in files):
+        return None
+
+    flags = command.group(1).split()
+
+    if "-q" not in flags:
+        flags.append("-q")
+
+    return [sys.executable, "-m", "pytest", *flags, *files, "-p", "no:cacheprovider"]
+
+
+def run_item_acceptance(command: list[str]) -> tuple[bool, str]:
+    """Roda o comando de aceite do item. Devolve (passou, final da saída)."""
+
+    try:
+        result = subprocess.run(command, cwd=str(PROJECT_ROOT), capture_output=True, text=True, encoding="utf-8",
+                                errors="replace", timeout=ITEM_ACCEPTANCE_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        return False, "o comando de aceite passou do tempo limite"
+    except OSError as error:
+        return False, f"não consegui rodar o comando de aceite: {error}"
+
+    output = ((result.stdout or "") + "\n" + (result.stderr or "")).strip()
+
+    return result.returncode == 0, output[-600:]
 
 
 def check_checklist_acceptance(
@@ -51,6 +125,20 @@ def check_checklist_acceptance(
             "Este item depende do usuário (medição no PC dele ou alteração de arquivos protegidos). "
             "Explique a ele o que precisa ser feito; quem marca o item como concluído é o usuário.",
         )
+
+    # =========================================================
+    # REGRA: O COMANDO DE ACEITE DO ITEM TEM QUE RETORNAR 0
+    # =========================================================
+    command = extract_item_acceptance(full_checklist_item(item, project_spec_path))
+
+    if command is not None:
+        passed, output = run_item_acceptance(command)
+
+        if not passed:
+            return False, (
+                "Critério de aceite executável do item FALHOU (o item só pode ser marcado quando o comando do "
+                "'pronto quando' retorna 0). Saída final: " + output
+            )
 
     # =========================================================
     # REGRA: ESCOLHER MODELO SMART CANDIDATO
@@ -118,6 +206,9 @@ def check_checklist_acceptance(
                 mem_data = json.loads(MEMORY_STORE_PATH.read_text(encoding="utf-8"))
                 decisions = mem_data.get("decisions", {})
                 for k, v in decisions.items():
+                    if not v.get("reviewed", True):
+                        continue  # decisão ainda não revisada pelo usuário não vale como evidência
+
                     val_str = str(v.get("value", "")).lower()
                     desc_str = str(v.get("description", "")).lower()
                     key_lower = k.lower()

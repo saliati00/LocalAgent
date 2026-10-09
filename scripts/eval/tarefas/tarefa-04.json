@@ -1,0 +1,22 @@
+{
+  "id": "script-python",
+  "titulo": "Criar um script Python que imprime um texto",
+  "prompt": "Crie o arquivo workspace/eval/ola.py que imprime a frase ola mundo.",
+  "setup": {},
+  "aceite": [
+    {
+      "type": "file_exists",
+      "path": "workspace/eval/ola.py"
+    },
+    {
+      "type": "file_contains",
+      "path": "workspace/eval/ola.py",
+      "text": "ola mundo"
+    },
+    {
+      "type": "command_exit_zero",
+      "command": "python workspace/eval/ola.py"
+    }
+  ],
+  "max_iteracoes": 12
+}

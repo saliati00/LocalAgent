@@ -1,0 +1,22 @@
+{
+  "id": "contar-arquivos",
+  "titulo": "Contar os arquivos de uma pasta",
+  "prompt": "Liste a pasta workspace/eval/pasta e grave em workspace/eval/contagem.txt quantos arquivos ela tem.",
+  "setup": {
+    "workspace/eval/pasta/a.txt": "a",
+    "workspace/eval/pasta/b.txt": "b",
+    "workspace/eval/pasta/c.txt": "c"
+  },
+  "aceite": [
+    {
+      "type": "file_exists",
+      "path": "workspace/eval/contagem.txt"
+    },
+    {
+      "type": "file_contains",
+      "path": "workspace/eval/contagem.txt",
+      "text": "3"
+    }
+  ],
+  "max_iteracoes": 10
+}
