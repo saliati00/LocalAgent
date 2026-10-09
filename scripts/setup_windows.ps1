@@ -12,7 +12,9 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
-$LogFile = Join-Path $Root "instalacao.log"
+$LogDir = Join-Path $Root "logs"
+New-Item -ItemType Directory -Force $LogDir | Out-Null
+$LogFile = Join-Path $LogDir "instalacao.log"
 try { Start-Transcript -Path $LogFile -Append | Out-Null } catch { }
 
 $TotalSteps = 7
@@ -197,7 +199,7 @@ try {
         if ($LASTEXITCODE -eq 0) {
             Say "  Todos os testes passaram." "Green"
         } else {
-            Warn "Alguns testes falharam. O agente pode funcionar, mas envie a pasta 'instalacao.log' para quem estiver te ajudando."
+            Warn "Alguns testes falharam. O agente pode funcionar, mas envie a pasta 'logs' (tem o instalacao.log) para quem estiver te ajudando."
         }
     }
 
@@ -264,7 +266,7 @@ try {
 } catch {
     Say ""
     Say "ERRO: $($_.Exception.Message)" "Red"
-    Say "A instalacao parou. O texto acima ficou salvo em instalacao.log." "Red"
+    Say "A instalacao parou. O texto acima ficou salvo em logs\instalacao.log." "Red"
     try { Stop-Transcript | Out-Null } catch { }
     exit 1
 }

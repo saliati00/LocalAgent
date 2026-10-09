@@ -90,9 +90,9 @@ Se aparecer **`[NEEDS_HUMAN]`**, significa que a tarefa depende de algo que só 
 | "Não foi possível falar com o Ollama" | Abra o programa **Ollama** pelo menu Iniciar, ou dê duplo clique em `iniciar.bat` (ele abre sozinho). |
 | "O modelo ... não foi baixado" | Abra o **Prompt de Comando** e rode `ollama pull qwen3:8b`. |
 | O agente está muito lento | Feche jogos e navegadores pesados. Confira no `verificar.bat` se a placa NVIDIA foi detectada. |
-| Algum teste falhou na instalação | Guarde o arquivo **`instalacao.log`** (fica na pasta) e mostre para quem te ajuda. |
+| Algum teste falhou na instalação | Guarde a pasta **`logs`** (o arquivo `instalacao.log` fica dentro dela) e mostre para quem te ajuda. |
 
-Todos os passos da instalação ficam registrados em **`instalacao.log`**. O que o agente fez fica em **`logs\agent.log`**.
+Todos os passos da instalação ficam registrados em **`logs\instalacao.log`**. O que o agente fez fica em **`logs\agent.log`**.
 
 ---
 

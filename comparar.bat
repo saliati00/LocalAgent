@@ -28,5 +28,5 @@ echo.
 .venv\Scripts\python.exe scripts\comparar_modelos.py %*
 
 echo.
-echo Pronto. Leve a pasta logs\comparacao e o arquivo logs\agent.log. Aperte qualquer tecla.
+echo Pronto. Compacte a pasta logs inteira e envie. Nao precisa anotar nem copiar nada. Aperte qualquer tecla.
 pause >nul

@@ -4,6 +4,10 @@ LOCALAGENT - O QUE FAZER NA SEGUNDA-FEIRA (rodada longa)
 Esta e a unica rodada ate a proxima. Ela foi montada para NAO desperdicar nada:
 um caso que falha nao para os outros, o que ja rodou fica salvo, e da para retomar.
 
+REGRA DE OURO: voce NAO precisa anotar nem copiar nada. Tudo o que eu preciso fica na pasta  logs.
+No fim, compacte a pasta  logs  inteira (botao direito > Enviar para > Pasta compactada) e me mande.
+
+
 O QUE ELA MEDE
 - 9 perfis, nesta ordem. Primeiro os FAST (o modelo do dia a dia):
     9b          qwen3.5:9b, configuracao padrao
@@ -18,12 +22,13 @@ O QUE ELA MEDE
     par-9b+gemma12  o 9b como FAST que ENTREGA ao gemma4:12b quando trava
                     (testa o conjunto de ponta a ponta)
     s-coder30       qwen3-coder:30b (~19 GB, no limite da sua RAM; por ultimo)
-- 42 casos por perfil FAST, incluindo 10 TAREFAS REAIS DE DESENVOLVIMENTO (corrigir bug,
-  implementar funcao, renomear em varios arquivos, escrever testes, refatorar...).
-  Nao sao mais so testes sinteticos.
+- 43 casos por perfil FAST, incluindo 10 TAREFAS REAIS DE DESENVOLVIMENTO (corrigir bug,
+  implementar funcao, renomear em varios arquivos, escrever testes, refatorar...) e a
+  verificacao automatica da tela de confirmacao.
 - Duracao: FAST de 6 a 8 horas; SMART mais 6 a 10 horas (estimativa incerta).
-  Tudo junto: de 12 a 18 horas. Pode dividir em duas noites (veja o passo 4).
+  Tudo junto: de 12 a 18 horas. Pode dividir em duas noites (veja o passo 3).
 - Downloads dos SMART: cerca de 41 GB no total (o programa pergunta antes de baixar).
+- Durante a rodada ele anota o consumo da maquina (VRAM, GPU, RAM, temperatura) a cada 5 s.
 
 
 ANTES DE COMECAR
@@ -33,18 +38,11 @@ ANTES DE COMECAR
     (se nao tiver a pasta: git clone https://github.com/saliati00/LocalAgent.git
      e depois dar duplo clique em instalar.bat)
 
-[ ] 2. Anotar a versao do Ollama:
-        ollama --version
-        Numero que deu: ______________________
+[ ] 2. (Opcional, 1 minuto) Veja a estimativa de como cada modelo deve rodar na sua maquina:
+        .venv\Scripts\python scripts\estimar_desempenho.py
+    O resultado fica salvo em  logs\estimativa-desempenho.txt.
 
-[ ] 3. Teste que so voce pode fazer (2 minutos), ANTES do passo 4:
-        - abrir iniciar.bat
-        - pedir:  Instale o cmake com winget.
-        - a tela de confirmacao deve aparecer legivel
-        - responder C e ENTER (cancelar) e sair do agente (ENTER vazio)
-        Apareceu legivel? ( ) sim  ( ) nao
-
-[ ] 4. Fechar tudo que for pesado (jogos, navegador com muitas abas) e dar duplo clique em:
+[ ] 3. Fechar tudo que for pesado (jogos, navegador com muitas abas) e dar duplo clique em:
         comparar.bat
         - Os modelos qwen3.5:9b, qwen3.5:4b e qwen3:8b ja devem estar instalados.
           Os SMART (gemma4:12b, gpt-oss:20b, qwen3-coder:30b) precisam ser baixados:
@@ -85,29 +83,31 @@ SE O PC TRAVAR (tela congelada, tudo lento demais, precisou segurar o botao de l
       ABANDONADO e aparece como "NAO RODOU" (quase sempre e falta de memoria, tipico do
       qwen3-coder:30b). Os outros perfis seguem.
 - Durante a rodada ele tambem vigia a memoria: se a RAM livre cair abaixo de 700 MB por uns
-  20 segundos, ele encerra aquele perfil ANTES de o PC travar e anota o motivo no relatorio.
+  20 segundos, ele encerra aquele perfil ANTES de o PC travar e anota o motivo.
+- O rastro do que aconteceu ate o travamento (RAM livre, VRAM, temperatura a cada 5 s) fica no
+  consumo.csv de cada perfil, e o final dos logs do proprio Ollama fica em ollama-server.log.
 - Se o PC travar com frequencia, nao insista: rode so os perfis menores, por exemplo
-        comparar.bat --retomar logs\comparacao\NOME_DA_PASTA --perfis fast,s-gemma12
+        comparar.bat --perfis fast,s-gemma12
 
 
 SE A RODADA PARAR NO MEIO (queda de luz, PC reiniciou, fechou a janela sem querer)
-- Nao comece do zero. Rode de novo apontando para a pasta que ja foi criada:
-        comparar.bat --retomar logs\comparacao\NOME_DA_PASTA
-  (ele aproveita o que ja rodou e so faz o que falta)
+- Basta dar duplo clique em  comparar.bat  de novo, com as mesmas opcoes. Ele continua sozinho.
 - Um caso que falha ou da erro NAO para os demais. Se o Ollama cair, o programa tenta
   levanta-lo sozinho e repete o caso; essas falhas aparecem como "INFRA" e nao contam
   contra o modelo.
 
 
-O QUE TRAZER DE VOLTA PARA MIM
-[ ] A pasta  logs\comparacao  inteira (tem o COMPARATIVO.md com a tabela e, em cada perfil,
-    o consumo.csv: VRAM, GPU, RAM livre, temperatura. Se o PC travar, ele guarda o rastro)
-[ ] O arquivo  logs\agent.log
-[ ] O numero do "ollama --version" (passo 2)
-[ ] Se o teste do passo 3 apareceu legivel (sim/nao)
+O QUE ME MANDAR
+[ ] A pasta  logs  INTEIRA, compactada. Nada mais. Ela ja tem:
+      comparacao\<data>\COMPARATIVO.md        a tabela e o resumo
+      comparacao\<data>\maquina.txt           versao do Ollama, GPU, driver, RAM, disco, modelos instalados
+      comparacao\<data>\console.txt           tudo o que apareceu na tela (inclusive mensagens de erro)
+      comparacao\<data>\<perfil>\consumo.csv  VRAM, GPU, RAM livre, temperatura a cada 5 s
+      comparacao\<data>\ollama-server.log     o final do log do proprio Ollama
+      agent.log, estimativa-desempenho.txt, instalacao.log, comparar-erro.txt (se houve erro)
 
 
 SE DER ERRO
-- Instalacao falhou: guardar o arquivo instalacao.log e me mandar.
-- "O Ollama nao respondeu": abrir o aplicativo Ollama (ou rodar iniciar.bat uma vez) e tentar de novo.
-- Qualquer outra coisa: copiar a mensagem inteira e trazer. Falha e resultado util, nao erro seu.
+- Nao precisa copiar a mensagem: ela ja foi salva em logs (console.txt e comparar-erro.txt).
+  So compacte a pasta logs e me mande. Falha e resultado util, nao erro seu.
+- "O Ollama nao respondeu": abra o aplicativo Ollama (ou rode iniciar.bat uma vez) e rode o comparar.bat de novo.

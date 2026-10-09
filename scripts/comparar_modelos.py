@@ -17,10 +17,14 @@ import csv
 import datetime
 import json
 import os
+import platform
 import re
+import shutil
 import subprocess
 import sys
+import threading
 import time
+import traceback
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -537,6 +541,130 @@ def available_memory_mb() -> int | None:
     return int(status.ullAvailPhys // (1024 * 1024))
 
 
+def total_memory_mb() -> int | None:
+    """RAM física total no Windows (None em outros sistemas)."""
+
+    if os.name != "nt":
+        return None
+
+    import ctypes
+
+    class MemoryStatus(ctypes.Structure):
+        _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong), ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong), ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong), ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong), ("sullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+    status = MemoryStatus()
+    status.dwLength = ctypes.sizeof(MemoryStatus)
+
+    try:
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
+    except Exception:  # noqa: BLE001
+        return None
+
+    return int(status.ullTotalPhys // (1024 * 1024))
+
+
+def machine_snapshot(run=None, profiles=None) -> str:
+    """Ficha da máquina (para entender os resultados e o consumo): fica em logs/, junto do resto."""
+
+    run = run or run_cmd
+    ram_total = total_memory_mb()
+    ram_free = available_memory_mb()
+    lines = [
+        "FICHA DA MÁQUINA", "",
+        f"Data: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
+        f"Sistema: {platform.platform()}", f"Processador (núcleos lógicos): {os.cpu_count()}",
+        f"RAM total: {ram_total} MB | livre agora: {ram_free} MB",
+    ]
+
+    for title, command in (("GPU (nome, driver, VRAM total)", ["nvidia-smi", "--query-gpu=name,driver_version,memory.total", "--format=csv,noheader"]),
+                           ("Versão do Ollama", ["ollama", "--version"]), ("Modelos instalados", ["ollama", "list"]),
+                           ("Projeto (commit)", ["git", "-C", str(ROOT), "rev-parse", "HEAD"])):
+        code, output = run(command, 30)
+        lines += ["", f"{title}:", output.strip() if code == 0 and output.strip() else "(não disponível)"]
+
+    try:
+        free_gb = round(shutil.disk_usage(ROOT).free / 1024**3, 1)
+    except OSError:
+        free_gb = None
+
+    lines += ["", f"Python: {sys.version.split()[0]}", f"Disco livre onde está o projeto: {free_gb} GB",
+              "Variáveis OLLAMA_*: " + (", ".join(f"{k}={v}" for k, v in sorted(os.environ.items()) if k.startswith("OLLAMA_")) or "(nenhuma)")]
+
+    if os.name == "nt":
+        code, plan = run(["powercfg", "/getactivescheme"], 15)
+        lines += ["", "Plano de energia do Windows:", plan.strip() if code == 0 and plan.strip() else "(não disponível)"]
+
+    if profiles:
+        lines += ["", "Perfis desta rodada: " + ", ".join(p["label"] for p in profiles)]
+
+    return "\n".join(lines) + "\n"
+
+
+def collect_ollama_logs(folder: Path, tail_lines: int = 3000, base: Path | None = None) -> list[str]:
+    """Copia o final dos logs do próprio Ollama (quedas, falta de memória, erros de GPU) para dentro de logs/."""
+
+    base = base or (Path(os.environ.get("LOCALAPPDATA", "")) / "Ollama")
+    copied = []
+
+    for name in ("server.log", "app.log"):
+        source = base / name
+
+        try:
+            if not source.is_file():
+                continue
+
+            tail = source.read_text(encoding="utf-8", errors="replace").splitlines()[-tail_lines:]
+            (folder / f"ollama-{name}").write_text("\n".join(tail) + "\n", encoding="utf-8")
+            copied.append(name)
+        except OSError:
+            continue
+
+    return copied
+
+
+class Tee:
+    """Espelha o que vai para o terminal num arquivo (console.txt): nenhuma mensagem precisa ser copiada à mão."""
+
+    def __init__(self, target, path: Path):
+        self.target = target
+        self.path = path
+        self.handle = None
+
+        try:
+            self.handle = open(path, "a", encoding="utf-8", errors="replace")
+        except OSError:
+            pass
+
+    def write(self, text):
+        if self.handle:
+            try:
+                self.handle.write(text)
+                self.handle.flush()
+            except (OSError, ValueError):
+                pass
+
+        try:
+            return self.target.write(text)
+        except UnicodeEncodeError:
+            return self.target.write(text.encode("ascii", errors="replace").decode("ascii"))
+
+    def flush(self):
+        try:
+            self.target.flush()
+        except (OSError, ValueError):
+            pass
+
+    def close(self):
+        if self.handle:
+            self.handle.close()
+
+    def __getattr__(self, name):
+        return getattr(self.target, name)
+
+
 def kill_tree(process) -> None:
     """Encerra o processo e os filhos (pytest, ollama...)."""
 
@@ -692,7 +820,7 @@ def summarize_consumption(path: Path) -> dict | None:
             "temp_pico_c": peak("temp_c"), "ram_livre_min_mb": low("ram_livre_mb"), "cpu_medio_pct": mean("cpu_pct")}
 
 
-def run_guarded(command, env, cwd, timeout, memory=None, popen=None, clock=None, poll=MEMORY_POLL_SECONDS, sampler=None) -> str:
+def run_guarded(command, env, cwd, timeout, memory=None, popen=None, clock=None, poll=MEMORY_POLL_SECONDS, sampler=None, echo=False) -> str:
     """
     Roda o processo vigiando tempo e memória. Devolve "ok", "timeout" ou "memoria". Se a RAM livre ficar
     abaixo do mínimo por vários ciclos seguidos, mata a árvore de processos antes de o PC travar.
@@ -701,7 +829,17 @@ def run_guarded(command, env, cwd, timeout, memory=None, popen=None, clock=None,
     memory = memory or available_memory_mb
     popen = popen or subprocess.Popen
     clock = clock or time.time
-    process = popen(command, env=env, cwd=cwd, stdin=subprocess.DEVNULL)
+    extra = {"stdout": subprocess.PIPE, "stderr": subprocess.STDOUT, "text": True, "encoding": "utf-8", "errors": "replace"} if echo else {}
+    process = popen(command, env=env, cwd=cwd, stdin=subprocess.DEVNULL, **extra)
+
+    if echo and getattr(process, "stdout", None) is not None:
+        def pump():
+            for line in process.stdout:
+                sys.stdout.write(line)
+                sys.stdout.flush()
+
+        threading.Thread(target=pump, daemon=True).start()
+
     deadline = clock() + timeout
     low = 0
 
@@ -767,7 +905,7 @@ def run_one(profile: dict, folder: Path, args, resume: bool = False, url: str = 
         folder.mkdir(parents=True, exist_ok=True)
         cpu = CpuMeter()
         outcome = run_guarded(command, env, str(ROOT), limit,
-                              sampler=lambda: append_sample(folder / CONSUMPTION_FILE, sample_resources(cpu=cpu.read)))
+                              sampler=lambda: append_sample(folder / CONSUMPTION_FILE, sample_resources(cpu=cpu.read)), echo=True)
 
         if outcome == "timeout":
             finished = False
@@ -923,6 +1061,17 @@ def orchestrate(args) -> int:
     root = Path(args.retomar) if resume else new_run_folder()
     root.mkdir(parents=True, exist_ok=True)
     write_run_file(root, profiles, args, completed=False)
+    tee = Tee(sys.stdout, root / "console.txt")
+    sys.stdout = tee
+
+    try:
+        sheet = root / "maquina.txt"
+        text = machine_snapshot(profiles=profiles)
+        sheet.write_text(text, encoding="utf-8") if not sheet.exists() else sheet.write_text(
+            sheet.read_text(encoding="utf-8") + "\n--- rodada retomada ---\n" + text, encoding="utf-8")
+    except OSError:
+        pass
+
     interrupted = False
     print(f"\nComparação em: {root}\nOllama: {version.splitlines()[-1]}\nPerfis: {', '.join(p['label'] for p in profiles)}\n")
 
@@ -936,13 +1085,19 @@ def orchestrate(args) -> int:
                     entries.append({"label": profile["label"], "results": [], "meta": {}, "profile": profile, "skipped": f"erro inesperado: {exc}"})
 
                 write_partial(entries, root)
+                collect_ollama_logs(root)
     except KeyboardInterrupt:
         interrupted = True
         print("\nInterrompido. Gerando o comparativo do que foi feito. Rode o comparar.bat de novo para continuar de onde parou.")
 
     write_run_file(root, profiles, args, completed=not interrupted)
+    collect_ollama_logs(root)
 
-    return finish(entries, root)
+    try:
+        return finish(entries, root)
+    finally:
+        sys.stdout = tee.target
+        tee.close()
 
 
 def has_progress(folder: Path) -> bool:
@@ -1007,7 +1162,7 @@ def finish(entries: list[dict], root: Path) -> int:
     (root / "COMPARATIVO.md").write_text(report, encoding="utf-8")
     print("\n" + report)
     print("\nVISÃO GERAL\n" + cli_table([summarize_model(e) for e in entries]))
-    print(f"\nTraga de volta a pasta inteira: {root}\n(e o arquivo logs\\agent.log)")
+    print(f"\nResultados salvos em: {root}\nCompacte a pasta logs inteira e envie. Não precisa anotar nem copiar nada.")
     return 0
 
 
@@ -1045,7 +1200,21 @@ def main(argv=None) -> int:
     if args.montar:
         return rebuild(Path(args.montar))
 
-    return orchestrate(args)
+    try:
+        return orchestrate(args)
+    except Exception:  # noqa: BLE001 - qualquer falha inesperada precisa deixar rastro em logs/
+        report = ROOT / "logs" / "comparar-erro.txt"
+
+        try:
+            report.parent.mkdir(parents=True, exist_ok=True)
+            report.write_text(f"{datetime.datetime.now().isoformat(timespec='seconds')}\n\n{traceback.format_exc()}", encoding="utf-8")
+        except OSError:
+            pass
+
+        print(f"\n!!! Erro inesperado no comparar. O detalhe foi salvo em {report}. Rode o comparar.bat de novo para continuar de onde parou.")
+        traceback.print_exc()
+
+        return 1
 
 
 if __name__ == "__main__":

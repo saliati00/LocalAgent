@@ -26,6 +26,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+# Tudo que os scripts de teste produzem fica em logs/, a pasta que você compacta e me manda.
+DEFAULT_OUTPUT = ROOT / "logs" / "estimativa-desempenho.txt"
+
 # Sua máquina (RTX 3070 8 GB, Ryzen 5 5600G, 16 GB). A banda da RAM é a teórica de DDR4 dual channel
 # (~51 GB/s a 3200 MT/s) descontada; ajuste com --cpu-bw se souber o valor real.
 DEFAULT_HARDWARE = {
@@ -144,6 +147,7 @@ def main(argv=None) -> int:
     parser.add_argument("--ram", type=float, default=DEFAULT_HARDWARE["ram_gb"])
     parser.add_argument("--cpu-bw", type=float, default=DEFAULT_HARDWARE["cpu_bw"], help="banda da RAM em GB/s")
     parser.add_argument("--gpu-bw", type=float, default=DEFAULT_HARDWARE["gpu_bw"], help="banda da VRAM em GB/s")
+    parser.add_argument("--saida", default=str(DEFAULT_OUTPUT), help="arquivo onde a estimativa é gravada (padrão: logs/estimativa-desempenho.txt)")
     args = parser.parse_args(argv)
 
     from core.console import ensure_utf8_console
@@ -152,15 +156,28 @@ def main(argv=None) -> int:
 
     hardware = {**DEFAULT_HARDWARE, "vram_gb": args.vram, "ram_gb": args.ram, "cpu_bw": args.cpu_bw, "gpu_bw": args.gpu_bw}
     rows = [estimate(m, hardware, args.ctx, args.kv8) for m in MODELS]
+    lines = []
+    say = lines.append
 
-    print(f"Máquina: {args.vram:g} GB de VRAM, {args.ram:g} GB de RAM (~{hardware['os_reserved_gb']:g} GB reservados ao Windows), "
+    say(f"Máquina: {args.vram:g} GB de VRAM, {args.ram:g} GB de RAM (~{hardware['os_reserved_gb']:g} GB reservados ao Windows), "
           f"banda GPU {args.gpu_bw:g} GB/s, RAM {args.cpu_bw:g} GB/s. Contexto {args.ctx}" + (", cache KV em 8 bits" if args.kv8 else "") + ".\n")
-    print(table(rows))
-    print("\nVALIDAÇÃO (previsto x medido por você):")
-    print("\n".join(validation(rows)))
-    print("\nAvisos: * = arquitetura que o modelo de cálculo representa mal. Os modelos MoE leem só os especialistas ativos, mas a divisão")
-    print("por camadas do Ollama pode ler mais do que isso na prática. O que não cabe na RAM vira paginação em disco (velocidade /10 e risco de travar).")
-    print("Confie nas CLASSES (cabe, parcial, não cabe) mais do que nos tok/s. A rodada de verdade manda.")
+    say(table(rows))
+    say("\nVALIDAÇÃO (previsto x medido por você):")
+    say("\n".join(validation(rows)))
+    say("\nAvisos: * = arquitetura que o modelo de cálculo representa mal. Os modelos MoE leem só os especialistas ativos, mas a divisão")
+    say("por camadas do Ollama pode ler mais do que isso na prática. O que não cabe na RAM vira paginação em disco (velocidade /10 e risco de travar).")
+    say("Confie nas CLASSES (cabe, parcial, não cabe) mais do que nos tok/s. A rodada de verdade manda.")
+
+    text = "\n".join(lines)
+    print(text)
+
+    try:
+        output = Path(args.saida)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(text + "\n", encoding="utf-8")
+        print(f"\n(salvo em {output})")
+    except OSError as exc:
+        print(f"\n(não consegui salvar a estimativa: {exc})")
 
     return 0
 

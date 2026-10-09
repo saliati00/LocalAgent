@@ -52,7 +52,7 @@ Opções (todas opcionais):
 
 Para trocar de modelo, de contexto ou de servidor só numa execução (sem mexer no registro), o projeto lê as variáveis `LOCALAGENT_FAST_MODEL`, `LOCALAGENT_SMART_MODEL`, `LOCALAGENT_NUM_CTX`, `LOCALAGENT_OLLAMA_URL`, `LOCALAGENT_CALL_TIMEOUT` e `LOCALAGENT_TIMEOUT_FACTOR`.
 
-**Consumo da máquina:** durante cada perfil, a cada 5 segundos, a bateria anota em `consumo.csv` (dentro da pasta do perfil) a RAM livre, a VRAM usada, o uso e a potência da GPU, a temperatura e o uso da CPU, e o relatório resume os picos. Cada linha vai direto ao disco: se o PC travar, o rastro de memória até o último instante fica salvo. Antes de rodar, `python scripts\estimar_desempenho.py` mostra uma estimativa de quanto cada modelo cabe na sua máquina e a que velocidade deve gerar (só ordem de grandeza).
+**Consumo da máquina:** durante cada perfil, a cada 5 segundos, a bateria anota em `consumo.csv` (dentro da pasta do perfil) a RAM livre, a VRAM usada, o uso e a potência da GPU, a temperatura e o uso da CPU, e o relatório resume os picos. Cada linha vai direto ao disco: se o PC travar, o rastro de memória até o último instante fica salvo. Cada rodada também grava `maquina.txt` (GPU, driver, RAM, versão do Ollama, modelos instalados, commit do projeto). Tudo isso fica dentro de `logs`, a pasta que você compacta e me manda. Antes de rodar, `python scripts\estimar_desempenho.py` mostra uma estimativa de quanto cada modelo cabe na sua máquina e a que velocidade deve gerar (só ordem de grandeza; o resultado também é gravado em `logs\estimativa-desempenho.txt`).
 
 **À prova de falhas:** um caso que falha, trava ou dá erro **não interrompe os demais**. Cada caso roda isolado e com tempo limite; o resultado de cada um é gravado em disco na hora; se o Ollama cair no meio, a bateria tenta subi-lo de novo e repete o caso (a falha que sobrar é marcada como "de infraestrutura" e **não conta contra o modelo**); arquivos versionados que o agente alterar são restaurados **logo depois do caso**, para não contaminar os seguintes; e o Windows é impedido de suspender o PC enquanto roda. Cada modelo tem um limite de 100 minutos.
 
@@ -74,7 +74,7 @@ Anote o número. (Há um relato público de que certas versões esquecem as cham
 ## Teste 1 — Instalação
 Faça: dê duplo clique em **`verificar.bat`**.
 Esperado: os testes automáticos passam (aparece `passed`) e a linha `Modelo qwen3:8b respondeu: ...`.
-Se falhar: copie a mensagem e guarde o `instalacao.log`.
+Se falhar: guarde a pasta `logs` (o `instalacao.log` está dentro dela).
 
 ## Teste 2 — Tarefas pequenas
 Faça: abra **`iniciar.bat`** e peça, **uma por vez**, esperando terminar:
@@ -172,10 +172,6 @@ Anote: o `Status` final mostrado em `[STATE]`, quantas iterações, e se aparece
 Velocidade (rápido, ok ou lento): _______
 
 ## O que me trazer de volta
-- **Se rodou o `comparar.bat`:** a pasta `logs\comparacao` e o `logs\agent.log` (basta isso, mais o `ollama --version` do teste 0).
-- A tabela preenchida.
-- A saída completa do `summarize_logs.py` (teste 4) e do `ollama ps` (teste 5).
-- A mensagem de erro de qualquer teste que falhou.
-- O arquivo `instalacao.log`, se a instalação avisou ou falhou.
+**A pasta `logs` inteira, compactada. Nada mais, e nada para anotar ou copiar à mão.** Ela já contém, por rodada: o comparativo (`COMPARATIVO.md`), a ficha da máquina (`maquina.txt`: versão do Ollama, GPU, driver, RAM, disco, modelos instalados), tudo o que apareceu na tela (`console.txt`, inclusive mensagens de erro), o consumo de cada perfil (`consumo.csv`), o final dos logs do próprio Ollama (`ollama-server.log`), o `agent.log`, a estimativa de desempenho, o `instalacao.log` e, se houve uma falha inesperada, o `comparar-erro.txt`.
 
 Nenhum desses testes altera nada importante: o pior que pode acontecer é um arquivo novo em `workspace\` ou `scripts\eval\`, que dá para apagar ou restaurar.
