@@ -1543,7 +1543,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-709 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+732 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -2000,3 +2000,13 @@ Bateria enxuta (o tempo de PC vai para o que decide):
 * **Perfis padrão:** FAST `9b`, `4b`, `9b-think`, `9b-kv8`, `4b-16k-kv8`; SMART `s-gemma12`, `s-gptoss20`, `par-9b+gemma12`. Saíram do padrão (disponíveis por nome) o `8b`, já medido duas vezes e pior em raciocínio, e o `s-coder30`, que a estimativa diz não caber em 16 GB de RAM.
 * **`9b-think`:** o mesmo 9b com raciocínio ligado (`LOCALAGENT_THINK=1`, chamadas de até 300 s). Junto com os SMART e o par, cobre as quatro categorias do item "[humano] Comparar FAST sozinho, FAST com think, SMART sozinho e cascata".
 * **`scripts/registrar_avaliacoes.py`:** gera `specs/avaliacoes.md` (o "pronto quando" desse item) a partir das pastas de `logs/comparacao`, com aprovação, raciocínio, tarefas reais, tarefas numeradas, tarefa 3, tokens/s, VRAM pico e RAM livre mínima por perfil.
+
+
+---
+
+# 60. CORREÇÕES DOS ERROS QUE SOBRARAM DA SEGUNDA COMPARAÇÃO
+
+* **Comandos de leitura sem confirmação:** os Qwen3.5 perdiam casos porque usavam `dir`, `grep` e afins, que pediam confirmação (e no Windows nem existem fora do cmd). Agora `dir`/`ls` (listagem, `/s` ou `-R` recursivo), `grep`/`findstr` (busca com `-c`, `-i`, `-n`, `-r`, `-l`; `findstr /c:`, `/i`, `/n`, `/s`) e `type`/`cat` são feitos pelo Harness em Python, **só dentro do projeto e só leitura**. Opção desconhecida ou caminho fora do projeto seguem o fluxo normal, com confirmação. O `python -c` continua pedindo confirmação, porque executa código.
+* **Dica no `replace_in_file`:** em arquivo inexistente ou com alvo vazio, a mensagem diz para usar `write_file`, que cria o arquivo e as pastas.
+* **JSON validado antes de gravar:** `write_file` e `replace_in_file` recusam `.json` inválido (como já faziam com `.py`), com a linha, a coluna e uma dica. O 8B tinha gravado um JSON quebrado na tarefa 2.
+* **Não resolvido:** a janela apertada no desenvolvimento geral (`CONTEXT_NEAR_LIMIT`) depende do perfil de 16 mil tokens da próxima rodada para ser medida.

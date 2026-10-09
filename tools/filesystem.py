@@ -1,4 +1,5 @@
 import ast
+import json
 import os
 from pathlib import Path
 
@@ -78,6 +79,29 @@ PROTECTED_SUBDIRS = PROTECTED_PATHS
 # trechos com start_line/end_line.
 MAX_READ_CHARS = 8000
 MAX_LIST_ITEMS = 200
+
+
+def _json_syntax_error(path: Path, content: str) -> str | None:
+    """Mensagem curta se o conteúdo de um .json não for JSON válido; senão None."""
+
+    if path.suffix.lower() != ".json":
+        return None
+
+    try:
+        json.loads(content)
+    except json.JSONDecodeError as error:
+        return (
+            f"JSON inválido na linha {error.lineno}, coluna {error.colno}: {error.msg}. O arquivo NÃO foi alterado. "
+            "Dica: chaves e textos entre aspas duplas, sem vírgula sobrando antes de } ou ], e true/false/null em minúsculas."
+        )
+
+    return None
+
+
+def _syntax_error(path: Path, content: str) -> str | None:
+    """Recusa gravar .py ou .json quebrado: o modelo recebe a linha e o motivo e corrige antes de estragar o arquivo."""
+
+    return _python_syntax_error(path, content) or _json_syntax_error(path, content)
 
 
 def _python_syntax_error(path: Path, content: str) -> str | None:
@@ -296,7 +320,7 @@ def write_file(path: str, content: str) -> dict:
             "error": error_msg,
         }
 
-    syntax_error = _python_syntax_error(target, content)
+    syntax_error = _syntax_error(target, content)
     if syntax_error:
         return {
             "success": False,
@@ -332,7 +356,10 @@ def replace_in_file(path: str, target: str, replacement: str) -> dict:
     if not target_file.exists():
         return {
             "success": False,
-            "error": f"Arquivo não encontrado: {target_file}",
+            "error": (
+                f"Arquivo não encontrado: {target_file}. replace_in_file só edita arquivos que já existem; "
+                "para CRIAR o arquivo use write_file (ele cria as pastas que faltarem)."
+            ),
         }
 
     if not target_file.is_file():
@@ -351,7 +378,7 @@ def replace_in_file(path: str, target: str, replacement: str) -> dict:
     if not target:
         return {
             "success": False,
-            "error": "O trecho alvo (target) não pode ser vazio.",
+            "error": "O trecho alvo (target) não pode ser vazio. Para escrever o arquivo inteiro de uma vez use write_file.",
         }
 
     try:
@@ -375,7 +402,7 @@ def replace_in_file(path: str, target: str, replacement: str) -> dict:
 
         new_content = content.replace(target, replacement, 1)
 
-        syntax_error = _python_syntax_error(target_file, new_content)
+        syntax_error = _syntax_error(target_file, new_content)
         if syntax_error:
             return {
                 "success": False,
