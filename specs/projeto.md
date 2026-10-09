@@ -1542,7 +1542,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-613 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+620 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1944,9 +1944,9 @@ Decisão de 09/10/2026: o modelo SMART (que assume quando o FAST trava) deixa de
 
 Um congelamento total não deixa o programa agir: nada em memória sobrevive. A bateria, portanto, passa a deixar em disco tudo de que a retomada precisa, e a tentar evitar o travamento por falta de memória, a causa mais provável com modelos grandes (`qwen3-coder:30b` com 19 GB numa máquina de 16 GB).
 
-* **Marcador de caso em andamento** (`em-andamento.json`): escrito antes de cada caso e apagado depois. Se sobrar na retomada, o caso vira um resultado `interrompido` (falha de infraestrutura: não conta contra o modelo) e soma uma queda ao perfil (`quedas.json`). Ctrl+C e exceções não deixam o marcador, para não serem confundidos com queda.
+* **Marcador de caso em andamento** (`em-andamento.json`): escrito antes de cada caso e apagado depois. Se sobrar na retomada, soma uma queda ao perfil e ao caso (`quedas.json`, total e por caso). Na primeira queda o caso é repetido; na segunda queda **no mesmo caso** ele é pulado (resultado `pulado`, falha de infraestrutura que não conta contra o modelo, listado em destaque no relatório e na coluna "Pulados" da tabela). Ctrl+C e exceções não deixam o marcador, para não serem confundidos com queda.
 * **Snapshot em disco** (`snapshot-arquivos.json`): os arquivos versionados e o hash do commit no início da bateria. Na retomada, se o `HEAD` é o mesmo, os arquivos alterados pelo caso interrompido são restaurados; se o projeto mudou (por exemplo `git pull`), nada é restaurado e o usuário é avisado, para não desfazer código novo.
-* **Disjuntor:** o perfil que interrompe a rodada `MAX_CRASHES` = 2 vezes é abandonado (`meta.json` com `abandoned`) e aparece como "NÃO RODOU" no comparativo, em vez de travar o PC em laço.
+* **Disjuntor:** o perfil que acumula `MAX_CRASHES` = 3 quedas (somando todos os casos) é abandonado (`meta.json` com `abandoned`) e aparece como "NÃO RODOU" no comparativo, em vez de travar o PC em laço.
 * **Vigia de memória** (`run_guarded`): consulta a RAM livre (`GlobalMemoryStatusEx`) a cada 5 s; abaixo de 700 MB por 4 ciclos seguidos encerra a árvore de processos (`taskkill /T /F`) antes da paginação pesada, descarrega o modelo e grava `abortado.txt`, que o relatório destaca em "perfis interrompidos". O mesmo laço aplica o limite de tempo do perfil.
 * **Retomada em dois níveis:** `comparar.bat --retomar <pasta>` aproveita perfis concluídos e continua o perfil parcial (inclusive se o travamento foi no primeiro caso, quando só existem o marcador e o snapshot).
 * **Limites:** se o PC congelar tão fundo que o próprio vigia não rode, a proteção é a retomada, não a prevenção; a leitura de memória só existe no Windows; 700 MB e 20 s são valores iniciais sem calibração.

@@ -57,7 +57,10 @@ SNAPSHOT_MAX_BYTES = 2_000_000
 INFLIGHT_FILE = "em-andamento.json"
 CRASHES_FILE = "quedas.json"
 SNAPSHOT_FILE = "snapshot-arquivos.json"
-MAX_CRASHES = 2
+# Um caso que derruba o PC é repetido uma vez; se derrubar de novo, é PULADO. Um perfil com esta
+# quantidade de quedas no total (somando todos os casos) é abandonado.
+MAX_CASE_CRASHES = 2
+MAX_CRASHES = 3
 
 DEFAULT_TIMEOUT = 900
 
@@ -673,49 +676,63 @@ def clear_inflight(folder: Path) -> None:
         pass
 
 
-def read_crashes(folder: Path) -> int:
+def read_crash_data(folder: Path) -> dict:
+    """Quedas deste perfil: total e por caso (formato antigo, só com 'count', também é lido)."""
+
     try:
-        return int(json.loads((folder / CRASHES_FILE).read_text(encoding="utf-8")).get("count", 0))
+        raw = json.loads((folder / CRASHES_FILE).read_text(encoding="utf-8"))
+        total = int(raw.get("total", raw.get("count", 0)))
+        per_case = {str(k): int(v) for k, v in dict(raw.get("por_caso", {})).items()}
+        return {"total": total, "por_caso": per_case}
     except (OSError, ValueError, AttributeError, TypeError):
-        return 0
+        return {"total": 0, "por_caso": {}}
 
 
-def recover_interrupted(folder: Path, results: list[dict]) -> tuple[bool, int]:
+def read_crashes(folder: Path) -> int:
+    return read_crash_data(folder)["total"]
+
+
+def recover_interrupted(folder: Path, results: list[dict]) -> tuple[bool, int, str | None]:
     """
-    Se a rodada anterior parou no meio de um caso (sobrou o marcador), registra esse caso como
-    interrompido (falha de infraestrutura: não conta contra o modelo) e soma uma queda ao perfil.
-    Devolve (houve_interrupcao, total_de_quedas).
+    Se a rodada anterior parou no meio de um caso (sobrou o marcador), conta uma queda para o perfil e para esse
+    caso. Na primeira queda o caso é REPETIDO (nenhum resultado é gravado); na segunda queda no mesmo caso ele é
+    PULADO (resultado `pulado`, fora da nota). Devolve (houve_interrupcao, total_de_quedas, caso_pulado_ou_None).
     """
 
     marker = folder / INFLIGHT_FILE
 
     if not marker.exists():
-        return False, read_crashes(folder)
+        return False, read_crashes(folder), None
 
     try:
         data = json.loads(marker.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         data = {}
 
-    crashes = read_crashes(folder) + 1
+    case_id, attempt = data.get("id", "?"), data.get("attempt", 1)
+    key = f"{case_id}#{attempt}"
+    crashes = read_crash_data(folder)
+    crashes["total"] += 1
+    crashes["por_caso"][key] = crashes["por_caso"].get(key, 0) + 1
 
     try:
-        (folder / CRASHES_FILE).write_text(json.dumps({"count": crashes}), encoding="utf-8")
+        (folder / CRASHES_FILE).write_text(json.dumps(crashes), encoding="utf-8")
     except OSError:
         pass
 
-    case_id, attempt = data.get("id", "?"), data.get("attempt", 1)
+    skipped = None
 
-    if not any(r.get("id") == case_id and r.get("attempt") == attempt for r in results):
-        result = failure_result({"id": case_id}, "interrompido: a rodada parou durante este caso (PC travou, reiniciou ou a janela foi fechada)",
-                                "interrompido", infra=True)
+    if crashes["por_caso"][key] >= MAX_CASE_CRASHES and not any(r.get("id") == case_id and r.get("attempt") == attempt for r in results):
+        result = failure_result({"id": case_id}, f"PULADO: este caso travou ou reiniciou o PC {crashes['por_caso'][key]} vezes (não conta contra o modelo)",
+                                "pulado", infra=True)
         result.update(attempt=attempt, group=data.get("group", "?"), info=bool(data.get("info")), tracked_changed=[])
         results.append(result)
         save_results(folder, results)
+        skipped = key
 
     clear_inflight(folder)
 
-    return True, crashes
+    return True, crashes["total"], skipped
 
 
 def git_head() -> str:
@@ -741,6 +758,9 @@ def load_snapshot(folder: Path) -> tuple[str | None, dict[str, bytes]]:
 
 
 def verdict_text(result: dict, info: bool) -> str:
+    if result.get("status") == "pulado":
+        return "PULADO"
+
     if result.get("infra") and not result.get("passed"):
         return "INFRA"
 
@@ -847,7 +867,8 @@ def select_cases(args) -> list[dict]:
 
 def build_report(results: list[dict], meta: dict) -> str:
     counted = [r for r in results if not r.get("info") and not r.get("infra")]
-    infra = [r for r in results if r.get("infra") and not r.get("passed")]
+    infra = [r for r in results if r.get("infra") and not r.get("passed") and r.get("status") != "pulado"]
+    skipped = [r for r in results if r.get("status") == "pulado"]
     passed = sum(1 for r in counted if r["passed"])
     lines = [
         "# Relatório da bateria",
@@ -860,6 +881,11 @@ def build_report(results: list[dict], meta: dict) -> str:
         f"- Falhas de infraestrutura (Ollama fora do ar; não contam contra o modelo): {len(infra)}",
         "",
     ]
+
+    if skipped:
+        lines += ["## ATENÇÃO: casos pulados porque travaram o PC", ""]
+        lines += [f"- {r['id']} (rodada {r.get('attempt', 1)}): {r.get('detail', '')}" for r in skipped]
+        lines.append("")
 
     changed = [r for r in results if r.get("tracked_changed")]
 
@@ -967,10 +993,13 @@ def orchestrate(args) -> int:
         backups = snapshot_tracked()
         save_snapshot(folder, backups)
 
-    interrupted, crashes = recover_interrupted(folder, results) if args.retomar else (False, 0)
+    interrupted, crashes, skipped_case = recover_interrupted(folder, results) if args.retomar else (False, 0, None)
 
-    if interrupted:
-        print(f"A rodada anterior parou no meio de um caso (queda {crashes} de {MAX_CRASHES} permitidas neste perfil).")
+    if skipped_case:
+        print(f"O caso {skipped_case} travou o PC {MAX_CASE_CRASHES} vezes: foi PULADO e a bateria segue com os próximos.")
+    elif interrupted:
+        print(f"A rodada anterior parou no meio de um caso (queda {crashes} de {MAX_CRASHES} permitidas neste perfil). "
+              f"O caso será repetido; se travar o PC de novo, será pulado.")
 
     if crashes >= MAX_CRASHES:
         reason = f"o PC travou ou reiniciou {crashes} vezes neste perfil (provável falta de memória); o perfil foi abandonado"

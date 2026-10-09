@@ -61,23 +61,67 @@ def test_ctrl_c_is_not_counted_as_a_crash(tmp_path):
     assert not (tmp_path / bateria.INFLIGHT_FILE).exists()
 
 
-def test_a_marker_left_behind_becomes_an_interrupted_infrastructure_result(tmp_path):
+def test_the_first_crash_repeats_the_case_instead_of_recording_a_result(tmp_path):
     bateria.mark_inflight(tmp_path, case("conta-dois-passos", "raciocinio"), 2)
     results: list[dict] = []
 
-    found, crashes = bateria.recover_interrupted(tmp_path, results)
+    found, crashes, skipped = bateria.recover_interrupted(tmp_path, results)
 
-    assert found is True and crashes == 1
-    assert results[0]["id"] == "conta-dois-passos" and results[0]["attempt"] == 2 and results[0]["group"] == "raciocinio"
-    assert results[0]["status"] == "interrompido" and results[0]["infra"] is True and results[0]["passed"] is False
+    assert (found, crashes, skipped) == (True, 1, None)
+    assert results == [], "sem resultado gravado o caso roda de novo"
     assert not (tmp_path / bateria.INFLIGHT_FILE).exists()
-    assert bateria.load_results(tmp_path)[0]["status"] == "interrompido"
+    assert bateria.read_crash_data(tmp_path)["por_caso"] == {"conta-dois-passos#2": 1}
+
+
+def test_the_second_crash_in_the_same_case_skips_it(tmp_path):
+    results: list[dict] = []
+
+    bateria.mark_inflight(tmp_path, case("conta-dois-passos", "raciocinio"), 2)
+    bateria.recover_interrupted(tmp_path, results)
+    bateria.mark_inflight(tmp_path, case("conta-dois-passos", "raciocinio"), 2)
+    found, crashes, skipped = bateria.recover_interrupted(tmp_path, results)
+
+    assert (found, crashes, skipped) == (True, 2, "conta-dois-passos#2")
+    assert results[0]["status"] == "pulado" and results[0]["infra"] is True and results[0]["passed"] is False
+    assert results[0]["attempt"] == 2 and results[0]["group"] == "raciocinio"
+    assert "PULADO" in results[0]["detail"]
+    assert bateria.load_results(tmp_path)[0]["status"] == "pulado"
+
+
+def test_crashes_in_different_cases_do_not_skip_any_of_them(tmp_path):
+    results: list[dict] = []
+
+    for case_id in ("a", "b", "c"):
+        bateria.mark_inflight(tmp_path, case(case_id), 1)
+        assert bateria.recover_interrupted(tmp_path, results)[2] is None
+
+    assert results == [] and bateria.read_crashes(tmp_path) == 3
+
+
+def test_a_skipped_case_is_not_run_again_by_the_plan(tmp_path):
+    results: list[dict] = []
+    ran = []
+
+    for _ in range(2):
+        bateria.mark_inflight(tmp_path, case("a"), 1)
+        bateria.recover_interrupted(tmp_path, results)
+
+    bateria.run_plan([(case("a"), 1), (case("b"), 1)], tmp_path, results,
+                     runner=lambda c, a, f: ran.append(c["id"]) or ok_result(c["id"]), say=lambda *a, **k: None)
+
+    assert ran == ["b"]
+
+
+def test_the_old_crash_file_format_is_still_read(tmp_path):
+    (tmp_path / bateria.CRASHES_FILE).write_text('{"count": 2}', encoding="utf-8")
+
+    assert bateria.read_crashes(tmp_path) == 2 and bateria.read_crash_data(tmp_path)["por_caso"] == {}
 
 
 def test_no_marker_means_no_crash_and_the_count_is_kept(tmp_path):
-    (tmp_path / bateria.CRASHES_FILE).write_text('{"count": 1}', encoding="utf-8")
+    (tmp_path / bateria.CRASHES_FILE).write_text('{"total": 1, "por_caso": {"a#1": 1}}', encoding="utf-8")
 
-    assert bateria.recover_interrupted(tmp_path, []) == (False, 1)
+    assert bateria.recover_interrupted(tmp_path, []) == (False, 1, None)
 
 
 def test_crashes_accumulate_across_resumes(tmp_path):
@@ -100,9 +144,9 @@ def test_a_case_that_already_has_a_result_is_not_duplicated_by_the_recovery(tmp_
 def test_a_corrupt_marker_is_still_treated_as_a_crash(tmp_path):
     (tmp_path / bateria.INFLIGHT_FILE).write_text("{quebrado", encoding="utf-8")
 
-    found, crashes = bateria.recover_interrupted(tmp_path, [])
+    found, crashes, skipped = bateria.recover_interrupted(tmp_path, [])
 
-    assert found is True and crashes == 1
+    assert found is True and crashes == 1 and skipped is None
 
 
 # ---------------------------------------------------------
@@ -171,7 +215,7 @@ def prepare_resume(tmp_path, monkeypatch, head_now="abc123"):
     return project, folder
 
 
-def test_resume_undoes_what_the_interrupted_case_left_behind(tmp_path, monkeypatch):
+def test_resume_undoes_what_the_interrupted_case_left_behind_and_repeats_the_case(tmp_path, monkeypatch):
     project, folder = prepare_resume(tmp_path, monkeypatch)
 
     bateria.orchestrate(resume_args(folder))
@@ -180,7 +224,7 @@ def test_resume_undoes_what_the_interrupted_case_left_behind(tmp_path, monkeypat
 
     saved = json.loads((folder / "resultados.json").read_text(encoding="utf-8"))
 
-    assert [r["status"] for r in saved if r["id"] == "ferramentas"][0] == "interrompido"
+    assert [r["id"] for r in saved] == ["ferramentas"] and saved[0]["passed"] is True, "o caso interrompido foi repetido"
 
 
 def test_resume_does_not_restore_old_files_when_the_project_was_updated_meanwhile(tmp_path, monkeypatch, capsys):
@@ -192,9 +236,9 @@ def test_resume_does_not_restore_old_files_when_the_project_was_updated_meanwhil
     assert "git pull" in capsys.readouterr().out
 
 
-def test_a_profile_that_crashes_the_pc_twice_is_abandoned_instead_of_looping(tmp_path, monkeypatch):
+def test_a_profile_that_accumulates_three_crashes_is_abandoned_instead_of_looping(tmp_path, monkeypatch):
     project, folder = prepare_resume(tmp_path, monkeypatch)
-    (folder / bateria.CRASHES_FILE).write_text('{"count": 1}', encoding="utf-8")
+    (folder / bateria.CRASHES_FILE).write_text('{"total": 2, "por_caso": {"outro#1": 1, "mais-um#1": 1}}', encoding="utf-8")
     ran = []
     monkeypatch.setattr(bateria, "run_in_child_once", lambda c, a, f: ran.append(c["id"]) or ok_result(c["id"]))
 
@@ -203,7 +247,24 @@ def test_a_profile_that_crashes_the_pc_twice_is_abandoned_instead_of_looping(tmp
     meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
 
     assert code == 3 and ran == []
-    assert "abandonado" in meta["abandoned"] and "2 vezes" in meta["abandoned"]
+    assert "abandonado" in meta["abandoned"] and "3 vezes" in meta["abandoned"]
+
+
+def test_two_crashes_in_one_case_skip_the_case_but_keep_the_profile_running(tmp_path, monkeypatch, capsys):
+    project, folder = prepare_resume(tmp_path, monkeypatch)
+    (folder / bateria.CRASHES_FILE).write_text('{"total": 1, "por_caso": {"ferramentas#1": 1}}', encoding="utf-8")
+    ran = []
+    monkeypatch.setattr(bateria, "run_in_child_once", lambda c, a, f: ran.append(c["id"]) or ok_result(c["id"]))
+    args = SimpleNamespace(so="ferramentas,listar-pasta", rapido=False, repeticoes=1, saida=str(folder), retomar=True, grupos="")
+
+    code = bateria.orchestrate(args)
+
+    saved = {r["id"]: r for r in json.loads((folder / "resultados.json").read_text(encoding="utf-8"))}
+
+    assert code == 0
+    assert saved["ferramentas"]["status"] == "pulado" and "ferramentas" not in ran and ran == ["listar-pasta"]
+    assert "PULADO" in capsys.readouterr().out
+    assert "casos pulados" in (folder / "RELATORIO.md").read_text(encoding="utf-8")
 
 
 def test_the_comparison_shows_an_abandoned_profile_as_not_run_with_the_reason(tmp_path):
@@ -330,3 +391,31 @@ def test_real_memory_reading_is_a_plausible_number_or_none():
     value = cmp.available_memory_mb()
 
     assert value is None or 100 < value < 4_000_000
+
+
+def test_the_comparison_lists_skipped_cases_and_counts_them_outside_the_score():
+    ok = {"id": "a", "passed": True, "group": "simples", "info": False, "tok_s": 50.0, "seconds": 1.0, "tools": 1,
+          "failed_tools": 0, "events": {}, "violations": [], "status": "completed", "attempt": 1, "detail": ""}
+    skipped = {**ok, "id": "conta-dois-passos", "passed": False, "status": "pulado", "infra": True, "group": "raciocinio"}
+    entry = {"label": "s-gptoss20", "results": [ok, skipped], "meta": {"ollama_ps": "ps"}}
+
+    summary = cmp.summarize_model(entry)
+    report = cmp.build_comparison([entry], "01/01/2027")
+
+    assert summary["total"] == 1 and summary["skipped_cases"] == ["conta-dois-passos"] and summary["infra"] == 0
+    assert "casos pulados porque travaram o PC" in report and "s-gptoss20: conta-dois-passos" in report
+    assert "Pulados" in cmp.cli_table([summary]).splitlines()[0]
+
+
+def test_the_battery_report_marks_skipped_cases_distinctly():
+    ok = bateria.failure_result(case("a"), "ok", "completed")
+    ok.update(passed=True, attempt=1, group="simples", info=False)
+    skipped = bateria.failure_result(case("b"), "PULADO: travou", "pulado", infra=True)
+    skipped.update(attempt=1, group="simples", info=False)
+    meta = {"date": "01/01/2027", "ollama_version": "x", "minutes": 1.0, "ollama_ps": "ps", "restored": [], "git_status": ""}
+
+    report = bateria.build_report([ok, skipped], meta)
+
+    assert "1 de 1 execuções passaram" in report and "PULADO" in report
+    assert "casos pulados porque travaram o PC" in report
+    assert "Falhas de infraestrutura (Ollama fora do ar; não contam contra o modelo): 0" in report

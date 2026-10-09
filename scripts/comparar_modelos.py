@@ -259,7 +259,8 @@ def collect(folder: Path, label: str | None = None) -> dict | None:
 def summarize_model(entry: dict) -> dict:
     results = entry["results"]
     counted = [r for r in results if not r.get("info") and not r.get("infra")]
-    infra = sum(1 for r in results if r.get("infra") and not r.get("passed"))
+    infra = sum(1 for r in results if r.get("infra") and not r.get("passed") and r.get("status") != "pulado")
+    skipped_cases = [r["id"] for r in results if r.get("status") == "pulado"]
     passed = sum(1 for r in counted if r["passed"])
     speeds = [r["tok_s"] for r in results if r.get("tok_s")]
     events: dict[str, int] = {}
@@ -291,6 +292,7 @@ def summarize_model(entry: dict) -> dict:
         "failed_tools": sum(r["failed_tools"] for r in results),
         "violations": sum(1 for r in results if r.get("violations")),
         "infra": infra,
+        "skipped_cases": skipped_cases,
         "events": events,
         "groups": {name: tuple(values) for name, values in groups.items()},
         "ollama_ps": entry["meta"].get("ollama_ps", "n/d"),
@@ -324,12 +326,12 @@ def case_cells(entries: list[dict]) -> dict[str, dict[str, str]]:
 def cli_table(summaries: list[dict]) -> str:
     """Tabela de texto puro para o terminal: um modelo por linha, os números que importam."""
 
-    headers = ["Modelo", "Casos ok", "%", "Casos falhos", "Erros de ferramenta", "Tokens entrada", "Tokens saída", "tok/s", "Minutos", "Falhas Ollama"]
+    headers = ["Modelo", "Casos ok", "%", "Casos falhos", "Erros de ferramenta", "Tokens entrada", "Tokens saída", "tok/s", "Minutos", "Falhas Ollama", "Pulados"]
     rows = []
 
     for s in summaries:
         if s["skipped"]:
-            rows.append([s["label"], "NÃO RODOU", "-", "-", "-", "-", "-", "-", "-", "-"])
+            rows.append([s["label"], "NÃO RODOU", "-", "-", "-", "-", "-", "-", "-", "-", "-"])
             continue
 
         def number(value):
@@ -337,7 +339,7 @@ def cli_table(summaries: list[dict]) -> str:
 
         rows.append([
             s["label"], f"{s['passed']}/{s['total']}", f"{s['rate']}%", str(s["total"] - s["passed"]), str(s["failed_tools"]),
-            number(s["tokens_in"]), number(s["tokens_out"]), "n/d" if s["avg_tok_s"] is None else str(s["avg_tok_s"]), str(s["minutes"]), str(s["infra"]),
+            number(s["tokens_in"]), number(s["tokens_out"]), "n/d" if s["avg_tok_s"] is None else str(s["avg_tok_s"]), str(s["minutes"]), str(s["infra"]), str(len(s["skipped_cases"])),
         ])
 
     widths = [max(len(row[i]) for row in [headers] + rows) for i in range(len(headers))]
@@ -408,6 +410,12 @@ def build_comparison(entries: list[dict], date: str) -> str:
             server = ", ".join(f"{k}={v}" for k, v in p.get("server", {}).items()) or "padrão"
             model = p["model"] + (f" (SMART: {p['smart_model']})" if p.get("smart_model") else "")
             lines.append(f"| {e['label']} | {p.get('role', 'fast')} | {model} | {p['num_ctx']} | {server} | {p.get('grupos') or 'todos'} |")
+
+    with_skips = [(e["label"], e["results"]) for e in entries if any(r.get("status") == "pulado" for r in e.get("results", []))]
+
+    if with_skips:
+        lines += ["", "## ATENÇÃO: casos pulados porque travaram o PC (2 quedas no mesmo caso)", ""]
+        lines += [f"- {label}: {r['id']} (rodada {r.get('attempt', 1)})" for label, results in with_skips for r in results if r.get("status") == "pulado"]
 
     interrupted = [e for e in entries if e.get("aborted")]
 
