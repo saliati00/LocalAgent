@@ -1,22 +1,10 @@
 {
   "environment": {
-    "os": {
-      "key": "os",
-      "value": "Fedora 44 KDE (Linux x86_64)",
-      "description": "Sistema operacional principal",
-      "updated_at": "2026-10-03T10:31:23.816884"
-    },
     "cpu": {
       "key": "cpu",
       "value": "AMD Ryzen 5 5600G (12 threads)",
       "description": "Processador principal",
       "updated_at": "2026-10-03T10:31:23.817088"
-    },
-    "gpu": {
-      "key": "gpu",
-      "value": "NVIDIA GeForce RTX 3070 8GB VRAM (CUDA 13.4, Driver 615.71.09)",
-      "description": "Aceleração GPU",
-      "updated_at": "2026-10-03T10:31:23.817238"
     },
     "ram": {
       "key": "ram",
@@ -24,71 +12,17 @@
       "description": "Memória do sistema",
       "updated_at": "2026-10-03T10:31:23.817334"
     },
-    "disk": {
-      "key": "disk",
-      "value": "263 GB disponíveis em /home",
-      "description": "Armazenamento NVMe",
-      "updated_at": "2026-10-03T10:31:23.817439"
+    "os": {
+      "key": "os",
+      "value": "Windows 10/11 (migrado do Fedora 44 KDE)",
+      "description": "Caminhos do Linux não valem mais; ferramentas vêm do PATH do Windows e do .venv\\Scripts",
+      "updated_at": "2026-10-09T16:44:35"
     },
-    "git": {
-      "key": "git",
-      "value": "/usr/bin/git",
-      "description": "Controle de versão",
-      "updated_at": "2026-10-03T10:31:23.817532"
-    },
-    "gcc": {
-      "key": "gcc",
-      "value": "/usr/bin/gcc",
-      "description": "Compilador C",
-      "updated_at": "2026-10-03T10:31:23.817633"
-    },
-    "g++": {
-      "key": "g++",
-      "value": "/usr/bin/g++",
-      "description": "Compilador C++",
-      "updated_at": "2026-10-03T10:31:23.817725"
-    },
-    "make": {
-      "key": "make",
-      "value": "/usr/bin/make",
-      "description": "Automação de build",
-      "updated_at": "2026-10-03T10:31:23.817816"
-    },
-    "cmake": {
-      "key": "cmake",
-      "value": "/home/bruno/local-agent/.venv/bin/cmake (v4.4.3)",
-      "description": "Gerador de build",
-      "updated_at": "2026-10-03T10:31:23.817911"
-    },
-    "python3": {
-      "key": "python3",
-      "value": "/usr/bin/python3 (v3.14.7)",
-      "description": "Runtime Python",
-      "updated_at": "2026-10-03T10:31:23.818008"
-    },
-    "pytest": {
-      "key": "pytest",
-      "value": "/home/bruno/local-agent/.venv/bin/pytest (v9.1.1)",
-      "description": "Suite de testes",
-      "updated_at": "2026-10-03T10:31:23.818111"
-    },
-    "curl": {
-      "key": "curl",
-      "value": "/usr/bin/curl",
-      "description": "Download HTTP",
-      "updated_at": "2026-10-03T10:31:23.818210"
-    },
-    "ollama": {
-      "key": "ollama",
-      "value": "/usr/local/bin/ollama (serviço ativo, modelo qwen3:8b)",
-      "description": "Backend local de inferência",
-      "updated_at": "2026-10-03T10:31:23.818312"
-    },
-    "system_os": {
-      "key": "system_os",
-      "value": "Linux",
-      "description": "O sistema operacional identificado é Linux.",
-      "updated_at": "2026-10-03T10:34:25.007716"
+    "gpu": {
+      "key": "gpu",
+      "value": "NVIDIA GeForce RTX 3070 8GB VRAM",
+      "description": "",
+      "updated_at": "2026-10-09T16:44:35"
     }
   },
   "decisions": {
@@ -110,89 +44,12 @@
       "description": "Experimento isolado; o Harness próprio é a espinha dorsal",
       "updated_at": "2026-10-03T10:31:23.818615"
     },
-    "candidate_qwen2.5-coder:14b": {
-      "key": "candidate_qwen2.5-coder:14b",
-      "value": "qwen2.5-coder:14b",
-      "description": "Candidato smart: Especialização em programação e raciocínio técnico. Compatível com RTX 3070 8GB VRAM operando com offload parcial em RAM. Candidato SMART — aguardando benchmark para adoção formal.",
-      "updated_at": "2026-10-03T19:15:52.822174"
-    },
-    "active_smart_model": {
-      "key": "active_smart_model",
-      "value": "qwen2.5:14b",
-      "description": "Aprovado no benchmark",
-      "updated_at": "2026-10-03T18:57:39.223378"
-    },
-    "smart_candidate": {
-      "key": "smart_candidate",
-      "value": "qwen2.5-coder:14b",
-      "description": "Modelo escolhido como candidato SMART devido à sua especialização em programação e raciocínio técnico.",
-      "updated_at": "2026-10-03T19:09:30.351748"
-    },
-    "candidate_deepseek-coder-v2:16b": {
-      "key": "candidate_deepseek-coder-v2:16b",
-      "value": "deepseek-coder-v2:16b",
-      "description": "Candidato smart: Candidato SMART alternativo — tamanho 16B, não 14B.",
-      "updated_at": "2026-10-03T18:57:39.142170"
-    },
-    "benchmark_candidate_qwen2.5-coder:14b": {
-      "key": "benchmark_candidate_qwen2.5-coder:14b",
-      "value": "qwen2.5-coder:14b",
-      "description": "Melhor candidato técnico",
-      "updated_at": "2026-10-03T18:57:39.220415"
-    },
-    "candidate_qwen3:4b": {
-      "key": "candidate_qwen3:4b",
-      "value": "qwen3:4b",
-      "description": "Candidato fast: Latência mínima.",
-      "updated_at": "2026-10-03T18:57:39.155432"
-    },
-    "fast_benchmark_candidate_qwen3:4b": {
-      "key": "fast_benchmark_candidate_qwen3:4b",
-      "value": "qwen3:4b",
-      "description": "Modelo FAST selecionado para benchmark: qwen3:4b",
-      "updated_at": "2026-10-03T18:57:39.155988"
-    },
-    "active_fast_model": {
-      "key": "active_fast_model",
-      "value": "llama3.2:3b",
-      "description": "Melhor latência no benchmark",
-      "updated_at": "2026-10-03T18:57:39.159061"
-    },
-    "candidate_llama3.2:3b": {
-      "key": "candidate_llama3.2:3b",
-      "value": "llama3.2:3b",
-      "description": "Candidato fast: Excelente throughput para tarefas simples.",
-      "updated_at": "2026-10-03T18:57:39.158233"
-    },
-    "fast_benchmark_candidate_llama3.2:3b": {
-      "key": "fast_benchmark_candidate_llama3.2:3b",
-      "value": "llama3.2:3b",
-      "description": "Modelo FAST selecionado para benchmark: llama3.2:3b",
-      "updated_at": "2026-10-03T18:57:39.158638"
-    },
-    "candidate_phi3:3.8b": {
-      "key": "candidate_phi3:3.8b",
-      "value": "phi3:3.8b",
-      "description": "Candidato fast: Menor latência, ideal para bootstrap e tarefas rotineiras.",
-      "updated_at": "2026-10-03T18:57:39.167572"
-    },
-    "candidate_qwen2.5:32b": {
-      "key": "candidate_qwen2.5:32b",
-      "value": "qwen2.5:32b",
-      "description": "Candidato smart: Raciocínio avançado com offload em RAM. Candidato SMART.",
-      "updated_at": "2026-10-03T18:57:39.168001"
-    },
-    "candidate_qwen2.5:14b": {
-      "key": "candidate_qwen2.5:14b",
-      "value": "qwen2.5:14b",
-      "description": "Candidato smart: Candidato SMART alternativo",
-      "updated_at": "2026-10-03T18:57:39.222572"
-    },
-    "benchmark_candidate_qwen2.5:14b": {
-      "key": "benchmark_candidate_qwen2.5:14b",
-      "value": "qwen2.5:14b",
-      "description": "Aprovado para benchmark",
-      "updated_at": "2026-10-03T18:57:39.223066"
+    "modelos": {
+      "key": "modelos",
+      "value": "FAST e SMART são definidos só em models/registry.json, pela bateria de testes; esta memória não registra modelo ativo",
+      "description": "",
+      "updated_at": "2026-10-09T16:44:35",
+      "reviewed": true
     }
   },
   "progress": {
@@ -201,26 +58,7 @@
       "value": "Concluída [x]",
       "description": "Ambiente Fedora, Ollama e Qwen3 8B validados",
       "updated_at": "2026-10-03T10:31:23.818716"
-    },
-    "tools_verified": {
-      "key": "tools_verified",
-      "value": "Todas as ferramentas essenciais verificadas",
-      "description": "git, gcc, g++, make, cmake, python, pytest, ollama",
-      "updated_at": "2026-10-03T10:31:23.818824"
-    },
-    "Fazer 8B instalar ferramentas adicionais": {
-      "key": "Fazer 8B instalar ferramentas adicionais",
-      "value": "Concluído",
-      "description": "Ferramentas adicionais foram instaladas conforme necessário para a tarefa.",
-      "updated_at": "2026-10-03T10:34:37.059200"
     }
   },
-  "notes": {
-    "test_key": {
-      "key": "test_key",
-      "value": "valor_de_teste",
-      "description": "desc",
-      "updated_at": "2026-10-06T09:09:08.116829"
-    }
-  }
+  "notes": {}
 }

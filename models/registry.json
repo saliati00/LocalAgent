@@ -12,27 +12,49 @@
       "status": "installed",
       "description": "Modelo operador rápido para tarefas rotineiras, ferramentas básicas e inspeção."
     },
-    "qwen2.5-coder:14b": {
-      "name": "qwen2.5-coder:14b",
-      "role": "smart",
+    "qwen3.5:9b": {
+      "name": "Qwen3.5 9B",
+      "role": "fast",
       "backend": "ollama",
-      "size_gb": 9.0,
-      "vram_gb": 8.0,
-      "context_window": 32768,
+      "size_gb": 6.6,
+      "vram_gb": 6.4,
+      "context_window": 262144,
       "status": "candidate",
-      "description": "Modelo especialista em código, raciocínio arquitetural e refatorações complexas.",
-      "justification": "Especialização em programação e raciocínio técnico. Compatível com RTX 3070 8GB VRAM operando com offload parcial em RAM. Candidato SMART — aguardando benchmark para adoção formal."
+      "description": "Candidato a FAST: o mais preciso nas comparações (raciocínio 11/12).",
+      "justification": "Segunda comparação (08/10/2026): 40/44 (91%), raciocínio 11/12, ~51 tokens/s, 12% na CPU com contexto 8192."
     },
-    "qwen2.5:14b": {
-      "name": "Qwen 2.5 14B",
+    "qwen3.5:4b": {
+      "name": "Qwen3.5 4B",
+      "role": "fast",
+      "backend": "ollama",
+      "size_gb": 3.4,
+      "vram_gb": 3.3,
+      "context_window": 262144,
+      "status": "candidate",
+      "description": "Candidato a FAST: duas vezes mais rápido e com metade da VRAM do 9B.",
+      "justification": "Segunda comparação (08/10/2026): 38/44 (86%), raciocínio 9/12, ~99 tokens/s, 100% na GPU (3,3 GB)."
+    },
+    "gemma4:12b": {
+      "name": "Gemma 4 12B",
       "role": "smart",
       "backend": "ollama",
-      "size_gb": 9.0,
+      "size_gb": 8.0,
       "vram_gb": 8.0,
-      "context_window": 32768,
+      "context_window": 262144,
       "status": "candidate",
-      "description": "Modelo de raciocínio geral e planejamento para tarefas longas e pesquisa.",
-      "justification": "Candidato SMART para raciocínio geral. Compatível com RTX 3070 8GB com offload parcial. Aguardando benchmark comparativo antes de adoção."
+      "description": "Candidato a SMART denso; o mais provável de caber quase inteiro na RTX 3070.",
+      "justification": "Disponível no Ollama com ferramentas e raciocínio configurável; estimativa de ~15% na CPU e ~14 tokens/s (scripts/estimar_desempenho.py). Aguarda a bateria."
+    },
+    "gpt-oss:20b": {
+      "name": "gpt-oss 20B",
+      "role": "smart",
+      "backend": "ollama",
+      "size_gb": 14.0,
+      "vram_gb": 8.0,
+      "context_window": 131072,
+      "status": "candidate",
+      "description": "Candidato a SMART MoE (poucos parâmetros ativos por token).",
+      "justification": "Disponível no Ollama com ferramentas e raciocínio; estimativa de ~50% na CPU e ~19 tokens/s graças aos poucos parâmetros ativos. Aguarda a bateria."
     }
   }
 }
