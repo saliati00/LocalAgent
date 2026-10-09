@@ -48,7 +48,7 @@ Opções (todas opcionais):
 - `comparar.bat --rapido`: bateria curta em cada modelo (sem as tarefas longas).
 - `comparar.bat --perfis 9b,4b`: só estes perfis (versão de 2 a 3 horas). Disponíveis: 9b, 4b, 9b-kv8, 4b-16k-kv8, 8b, s-gemma12, s-gptoss20, par-9b+gemma12, s-coder30. Grupos: `fast`, `smart`, `tudo`.
 - `comparar.bat --modelos qwen3:8b`: em vez de perfis, só esse modelo com a configuração padrão (ou uma lista separada por vírgulas).
-- `comparar.bat --sim`: baixa os modelos que faltam sem perguntar.
+- `comparar.bat --sim` (ou duplo clique em **`comparar-tudo-confirmado.bat`**): baixa os modelos que faltam sem perguntar e roda tudo sozinho.
 
 Para trocar de modelo, de contexto ou de servidor só numa execução (sem mexer no registro), o projeto lê as variáveis `LOCALAGENT_FAST_MODEL`, `LOCALAGENT_SMART_MODEL`, `LOCALAGENT_NUM_CTX`, `LOCALAGENT_OLLAMA_URL`, `LOCALAGENT_CALL_TIMEOUT` e `LOCALAGENT_TIMEOUT_FACTOR`.
 

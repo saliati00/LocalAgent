@@ -43,6 +43,8 @@ ANTES DE COMECAR
     O resultado fica salvo em  logs\estimativa-desempenho.txt.
 
 [ ] 3. Fechar tudo que for pesado (jogos, navegador com muitas abas) e dar duplo clique em:
+        comparar-tudo-confirmado.bat     (roda tudo sem perguntar nada, inclusive os downloads)
+    ou, se preferir responder a pergunta de download:
         comparar.bat
         - Os modelos qwen3.5:9b, qwen3.5:4b e qwen3:8b ja devem estar instalados.
           Os SMART (gemma4:12b, gpt-oss:20b) precisam ser baixados:
@@ -68,7 +70,7 @@ CUIDADOS ENQUANTO RODA
 
 SE O PC TRAVAR (tela congelada, tudo lento demais, precisou segurar o botao de ligar)
 - Reinicie o PC normalmente. Nao precisa apagar nada.
-- Abra a pasta LocalAgent e de duplo clique em  comparar.bat  DE NOVO (o mesmo comando de antes).
+- Abra a pasta LocalAgent e de duplo clique DE NOVO no mesmo .bat de antes (comparar-tudo-confirmado.bat ou comparar.bat).
   Ele percebe sozinho que a rodada anterior nao terminou e CONTINUA de onde parou.
   Nao precisa procurar nome de pasta. (Para ignorar a rodada antiga e comecar do zero: comparar.bat --nova)
 - Se voce tinha usado opcoes (por exemplo --perfis fast), repita as MESMAS opcoes: ele so retoma

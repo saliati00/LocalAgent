@@ -59,6 +59,7 @@ PROTECTED_PATHS = [
     (PROJECT_ROOT / "ROTEIRO-DE-TESTES.md").resolve(),
     (PROJECT_ROOT / "FAZER-EM-CASA.txt").resolve(),
     (PROJECT_ROOT / "comparar.bat").resolve(),
+    (PROJECT_ROOT / "comparar-tudo-confirmado.bat").resolve(),
     (PROJECT_ROOT / "specs" / "ambiente.md").resolve(),
     (PROJECT_ROOT / ".gitignore").resolve(),
     (PROJECT_ROOT / ".gitattributes").resolve(),

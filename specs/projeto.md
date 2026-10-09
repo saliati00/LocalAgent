@@ -1554,7 +1554,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-741 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+742 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.

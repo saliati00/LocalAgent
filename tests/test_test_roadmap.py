@@ -20,7 +20,7 @@ def test_every_file_the_roadmap_mentions_exists():
     for relative in re.findall(r"(?:tests|scripts)[/\\][\w./\\-]+\.(?:py|bat)", text):
         assert (PROJECT_ROOT / relative.replace("\\", "/")).exists(), relative
 
-    for name in re.findall(r"\b(\w+\.bat)\b", text):
+    for name in re.findall(r"(?<![\w-])([\w-]+\.bat)\b", text):
         assert (PROJECT_ROOT / name).exists(), name
 
 
