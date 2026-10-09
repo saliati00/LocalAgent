@@ -9,25 +9,25 @@ No fim, compacte a pasta  logs  inteira (botao direito > Enviar para > Pasta com
 
 
 O QUE ELA MEDE
-- 9 perfis, nesta ordem. Primeiro os FAST (o modelo do dia a dia):
+- 8 perfis, nesta ordem. Primeiro os FAST (o modelo do dia a dia):
     9b          qwen3.5:9b, configuracao padrao
     4b          qwen3.5:4b, configuracao padrao
+    9b-think    qwen3.5:9b com raciocinio ligado (mais lento; mede se pensar ajuda)
     9b-kv8      qwen3.5:9b com cache de KV quantizado (tenta caber 100% na placa)
     4b-16k-kv8  qwen3.5:4b com contexto de 16 mil tokens e cache quantizado
-    8b          qwen3:8b (a referencia antiga)
   Depois os candidatos a SMART (o modelo maior, que assume quando o FAST trava),
   so nos casos dificeis (raciocinio, tarefas reais, tarefas numeradas):
     s-gemma12       gemma4:12b (~8 GB)
     s-gptoss20      gpt-oss:20b (~14 GB)
     par-9b+gemma12  o 9b como FAST que ENTREGA ao gemma4:12b quando trava
                     (testa o conjunto de ponta a ponta)
-    s-coder30       qwen3-coder:30b (~19 GB, no limite da sua RAM; por ultimo)
+  (o qwen3:8b e o qwen3-coder:30b sairam: o 8b ja foi medido duas vezes e o 30b nao cabe na RAM)
 - 43 casos por perfil FAST, incluindo 10 TAREFAS REAIS DE DESENVOLVIMENTO (corrigir bug,
   implementar funcao, renomear em varios arquivos, escrever testes, refatorar...) e a
   verificacao automatica da tela de confirmacao.
-- Duracao: FAST de 6 a 8 horas; SMART mais 6 a 10 horas (estimativa incerta).
-  Tudo junto: de 12 a 18 horas. Pode dividir em duas noites (veja o passo 3).
-- Downloads dos SMART: cerca de 41 GB no total (o programa pergunta antes de baixar).
+- Duracao: FAST de 5 a 7 horas; SMART mais 3 a 6 horas (estimativa incerta).
+  Tudo junto: de 8 a 13 horas. Pode dividir em duas noites (veja o passo 3).
+- Downloads dos SMART: cerca de 22 GB no total (o programa pergunta antes de baixar).
 - Durante a rodada ele anota o consumo da maquina (VRAM, GPU, RAM, temperatura) a cada 5 s.
 
 
@@ -45,9 +45,9 @@ ANTES DE COMECAR
 [ ] 3. Fechar tudo que for pesado (jogos, navegador com muitas abas) e dar duplo clique em:
         comparar.bat
         - Os modelos qwen3.5:9b, qwen3.5:4b e qwen3:8b ja devem estar instalados.
-          Os SMART (gemma4:12b, gpt-oss:20b, qwen3-coder:30b) precisam ser baixados:
+          Os SMART (gemma4:12b, gpt-oss:20b) precisam ser baixados:
           ele lista o que falta, o tamanho e pergunta "Baixar agora? (S/N)". Responder S.
-          Confira antes se ha cerca de 50 GB livres em disco.
+          Confira antes se ha cerca de 30 GB livres em disco.
         - Depois e so deixar rodando. Nao digita nada.
 
         Para dividir em duas noites (recomendado):
@@ -105,6 +105,12 @@ O QUE ME MANDAR
       comparacao\<data>\<perfil>\consumo.csv  VRAM, GPU, RAM livre, temperatura a cada 5 s
       comparacao\<data>\ollama-server.log     o final do log do proprio Ollama
       agent.log, estimativa-desempenho.txt, instalacao.log, comparar-erro.txt (se houve erro)
+
+
+DEPOIS DA RODADA (opcional, 1 minuto)
+- Para gerar a tabela de avaliacoes do projeto (specs\avaliacoes.md):
+        .venv\Scripts\python scripts\registrar_avaliacoes.py
+  Se nao fizer, eu faco com a pasta logs que voce me mandar.
 
 
 SE DER ERRO

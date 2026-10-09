@@ -1220,7 +1220,7 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [ ] Comparar contexto
 * [ ] Determinar `MAX_CONTEXT`
 * [ ] Determinar `SAFE_CONTEXT`
-* [ ] Definir gatilho de compactação
+* [x] Definir gatilho de compactação
 * [ ] Comparar resultados Ollama vs llama.cpp
 * [ ] Escolher runtime principal
 * [ ] Definir interface abstrata do Model Backend
@@ -1253,7 +1253,7 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [x] Implementar compactação
 * [x] Implementar recuperação de contexto
 * [ ] Testar tarefas longas
-* [ ] Testar troca de modelo durante tarefa
+* [x] Testar troca de modelo durante tarefa
 
 ---
 
@@ -1267,13 +1267,13 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [x] Skill Models
 * [ ] Skill Games
 * [ ] Skill Mods
-* [ ] Permitir criação controlada de novas Skills
+* [x] Permitir criação controlada de novas Skills
 
 ---
 
 ## FASE 7 — MODEL SCOUT
 
-* [ ] Criar Model Registry
+* [x] Criar Model Registry
 * [ ] Criar pesquisa de modelos
 * [ ] Pesquisar Hugging Face
 * [ ] Pesquisar GitHub
@@ -1283,7 +1283,7 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [ ] Executar benchmark SMART
 * [ ] Comparar com baseline
 * [ ] Registrar resultados
-* [ ] Criar sistema de candidatos
+* [x] Criar sistema de candidatos
 * [ ] Criar staging
 * [ ] Criar rollback
 
@@ -1543,7 +1543,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-698 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+709 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1978,3 +1978,25 @@ Três itens da FASE 11 fechados em 09/10/2026, escritos pelo desenvolvedor porqu
 * **Conjunto de avaliação:** `scripts/eval/` (formato em `FORMATO.md`, cinco tarefas em `tarefas/` e `runner.py` com `load_tasks`, `check_acceptance` e `summarize`). O runner confere os critérios por código, sem modelo, recusa caminhos absolutos, com unidade ou com `..`, roda comandos sem shell e imprime a taxa de sucesso (`python scripts/eval/runner.py`). Os 18 testes de aceite das tarefas 2 e 3 passam. As tarefas reais de desenvolvimento medidas contra modelos ficam na bateria (capítulo 54).
 * **Aceite executável no checklist:** `update_spec_checklist` só marca um item quando o comando do seu "pronto quando" (um `pytest tests/...` com as opções `-m aceite` e `-q`) retorna 0. O texto completo do item é buscado no `specs/projeto.md`, porque o modelo costuma citar só um trecho. Itens sem comando executável seguem as regras anteriores, e os `[humano]` continuam só do usuário.
 * **Memória limitada e revisada:** chave de até 60 caracteres, valor de até 400, descrição de até 160 e no máximo 40 entradas por categoria; acima disso `save_memory` recusa com a razão. Decisões entram marcadas como não revisadas e só vão para o prompt depois que o usuário as aprova com `python scripts/revisar_memoria.py` (`aprovar CHAVE` ou `rejeitar CHAVE`); entradas antigas, sem o campo, contam como revisadas. Uma decisão pendente também não vale como evidência na escolha de um SMART.
+
+
+---
+
+# 59. ACELERAÇÃO: ITENS JÁ FEITOS, BATERIA ENXUTA E REGISTRO DAS AVALIAÇÕES
+
+Revisão de 09/10/2026 dos 75 pendentes contra o código: cinco já estavam implementados e testados, só não marcados.
+
+| Item | Evidência |
+|---|---|
+| Definir gatilho de compactação | `core/context/metrics.py` (`NEAR_LIMIT_RATIO` = 0,95, `context_pressure`) e `ContextManager.request_compaction`; `tests/test_context_manager.py` |
+| Testar troca de modelo durante tarefa | `tests/test_agent_escalation_flow.py` e `tests/test_fast_smart_escalation.py` (FAST → SMART com resumo de passagem, com modelos simulados); o teste com modelos reais é o perfil `par-9b+gemma12` |
+| Permitir criação controlada de novas Skills | `propose_skill` (rascunho só pelo SMART), `core/skills/validator.py`, `skills_pending/` e `scripts/promote_skill.py` (promoção humana); `tests/test_skill_expansion.py` |
+| Criar Model Registry | `models/registry.json`, `core/router/model_router.py` e `get_model_registry` |
+| Criar sistema de candidatos | `register_model_candidate`, `set_smart_candidate_for_benchmark`, `set_fast_candidate_for_benchmark` e o ciclo candidato → selecionado → adotado, com confirmação do usuário |
+
+Bateria enxuta (o tempo de PC vai para o que decide):
+
+* **Casos simples em 1 rodada** (empataram 19/20 nos três modelos e não diferenciam); raciocínio e tarefas reais continuam com 2.
+* **Perfis padrão:** FAST `9b`, `4b`, `9b-think`, `9b-kv8`, `4b-16k-kv8`; SMART `s-gemma12`, `s-gptoss20`, `par-9b+gemma12`. Saíram do padrão (disponíveis por nome) o `8b`, já medido duas vezes e pior em raciocínio, e o `s-coder30`, que a estimativa diz não caber em 16 GB de RAM.
+* **`9b-think`:** o mesmo 9b com raciocínio ligado (`LOCALAGENT_THINK=1`, chamadas de até 300 s). Junto com os SMART e o par, cobre as quatro categorias do item "[humano] Comparar FAST sozinho, FAST com think, SMART sozinho e cascata".
+* **`scripts/registrar_avaliacoes.py`:** gera `specs/avaliacoes.md` (o "pronto quando" desse item) a partir das pastas de `logs/comparacao`, com aprovação, raciocínio, tarefas reais, tarefas numeradas, tarefa 3, tokens/s, VRAM pico e RAM livre mínima por perfil.

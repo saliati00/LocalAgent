@@ -48,8 +48,11 @@ PROFILES = {
     "9b-kv8": {"model": "qwen3.5:9b", "num_ctx": 8192, "server": KV8},
     "4b-16k-kv8": {"model": "qwen3.5:4b", "num_ctx": 16384, "server": KV8},
     "8b": {"model": "qwen3:8b", "num_ctx": 8192, "server": {}},
+    # FAST com raciocínio ligado: responde o item "comparar FAST sozinho, FAST com think, SMART e cascata".
+    "9b-think": {"model": "qwen3.5:9b", "num_ctx": 8192, "server": {}, "think": True, "call_timeout": 300, "timeout_factor": 2},
 }
-FAST_PROFILES = ["9b", "4b", "9b-kv8", "4b-16k-kv8", "8b"]
+# Fora do padrão: 8b (já medido duas vezes e pior em raciocínio). Continua disponível por nome (--perfis 8b).
+FAST_PROFILES = ["9b", "4b", "9b-think", "9b-kv8", "4b-16k-kv8"]
 
 # Candidatos a SMART. Rodam só os grupos difíceis (raciocínio, tarefas reais, tarefas numeradas), uma rodada
 # cada, com mais tempo por caso e por chamada (parte do modelo fica na CPU). O que importa é acertar, não a velocidade.
@@ -64,7 +67,8 @@ PROFILES.update({
     "par-9b+gemma12": {"model": "qwen3.5:9b", "smart_model": "gemma4:12b", **{**SMART_BASE, "grupos": "real,tarefas"}},
     "s-coder30": {"model": "qwen3-coder:30b", **SMART_BASE},
 })
-SMART_PROFILES = ["s-gemma12", "s-gptoss20", "par-9b+gemma12", "s-coder30"]
+# Fora do padrão: s-coder30 (a estimativa diz que não cabe em 16 GB de RAM; risco de travar). Disponível por nome.
+SMART_PROFILES = ["s-gemma12", "s-gptoss20", "par-9b+gemma12"]
 DEFAULT_PROFILES = FAST_PROFILES + SMART_PROFILES
 PROFILE_GROUPS = {"fast": FAST_PROFILES, "smart": SMART_PROFILES, "tudo": DEFAULT_PROFILES}
 
@@ -161,7 +165,7 @@ def stop_model(model: str, url: str = DEFAULT_URL) -> None:
     run_cmd(["ollama", "stop", model], env=server_env(url))
 
 
-def smoke_test(model: str, url: str = DEFAULT_URL, num_ctx: int = 8192) -> dict:
+def smoke_test(model: str, url: str = DEFAULT_URL, num_ctx: int = 8192, think: bool = False) -> dict:
     """Uma chamada real: o modelo responde, aceita `think=False` e sabe pedir uma ferramenta?"""
 
     import ollama
@@ -174,7 +178,7 @@ def smoke_test(model: str, url: str = DEFAULT_URL, num_ctx: int = 8192) -> dict:
             model=model,
             messages=[{"role": "user", "content": "Use a ferramenta ping com o texto 'oi'."}],
             tools=[PING_TOOL],
-            think=False,
+            think=think,
             options={"num_ctx": num_ctx},
         )
     except Exception as exc:  # noqa: BLE001 - qualquer erro do servidor deve virar motivo no relatório
@@ -422,6 +426,7 @@ def build_comparison(entries: list[dict], date: str) -> str:
             p = e["profile"]
             server = ", ".join(f"{k}={v}" for k, v in p.get("server", {}).items()) or "padrão"
             model = p["model"] + (f" (SMART: {p['smart_model']})" if p.get("smart_model") else "")
+            model += " (raciocínio ligado)" if p.get("think") else ""
             lines.append(f"| {e['label']} | {p.get('role', 'fast')} | {model} | {p['num_ctx']} | {server} | {p.get('grupos') or 'todos'} |")
 
     with_skips = [(e["label"], e["results"]) for e in entries if any(r.get("status") == "pulado" for r in e.get("results", []))]
@@ -892,6 +897,9 @@ def run_one(profile: dict, folder: Path, args, resume: bool = False, url: str = 
     if profile.get("smart_model"):
         env["LOCALAGENT_SMART_MODEL"] = profile["smart_model"]
 
+    if profile.get("think"):
+        env["LOCALAGENT_THINK"] = "1"
+
     if profile.get("timeout_factor"):
         env["LOCALAGENT_TIMEOUT_FACTOR"] = str(profile["timeout_factor"])
 
@@ -1135,7 +1143,7 @@ def run_model(profile: dict, root: Path, args, entries: list[dict], resume: bool
 
     try:
         with server_for(profile, folder) as url:
-            smoke = smoke_test(model, url, profile.get("num_ctx", 8192))
+            smoke = smoke_test(model, url, profile.get("num_ctx", 8192), bool(profile.get("think")))
             print(f"    respondeu: {'sim' if smoke['ok'] else 'NÃO'} | chamou ferramenta: {'sim' if smoke['tool_call'] else 'NÃO'} | {smoke['seconds']} s {smoke['error']}")
 
             if not smoke["ok"]:

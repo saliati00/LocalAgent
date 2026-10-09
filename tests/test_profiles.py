@@ -35,11 +35,12 @@ def test_default_profiles_cover_both_models_the_kv_cache_and_the_bigger_context(
     assert by_label["9b-kv8"]["server"]["OLLAMA_FLASH_ATTENTION"] == "1"
     assert by_label["4b-16k-kv8"]["num_ctx"] == 16384
     assert by_label["9b"]["server"] == {} and by_label["4b"]["server"] == {}
-    assert by_label["8b"]["model"] == "qwen3:8b"
+    assert by_label["9b-think"]["think"] is True and by_label["9b-think"]["model"] == "qwen3.5:9b"
+    assert "8b" not in by_label and cmp.PROFILES["8b"]["model"] == "qwen3:8b", "o 8b saiu do padrão mas continua disponível"
 
 
 def test_the_most_valuable_profiles_run_first_so_a_cut_run_still_answers_the_question():
-    assert cmp.FAST_PROFILES[:2] == ["9b", "4b"] and cmp.FAST_PROFILES[-1] == "8b"
+    assert cmp.FAST_PROFILES[:2] == ["9b", "4b"] and "8b" not in cmp.FAST_PROFILES
 
 
 def test_profiles_can_be_chosen_by_name_and_unknown_ones_are_rejected():

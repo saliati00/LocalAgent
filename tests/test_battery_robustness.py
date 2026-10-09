@@ -455,7 +455,7 @@ def test_full_comparison_flow_isolates_a_model_that_blows_up(tmp_path, monkeypat
     monkeypatch.setattr(cmp, "ROOT", tmp_path)
     monkeypatch.setattr(cmp, "run_cmd", lambda command, timeout=60, env=None: (0, "ollama version is 9.9"))
     monkeypatch.setattr(cmp, "model_installed", lambda m: True)
-    monkeypatch.setattr(cmp, "smoke_test", lambda m, url=cmp.DEFAULT_URL, num_ctx=8192: {"ok": True, "tool_call": True, "seconds": 1, "error": ""})
+    monkeypatch.setattr(cmp, "smoke_test", lambda m, url=cmp.DEFAULT_URL, num_ctx=8192, think=False: {"ok": True, "tool_call": True, "seconds": 1, "error": ""})
 
     def fake_run_one(profile, folder, a, resume=False, url=cmp.DEFAULT_URL):
         model = profile["model"]

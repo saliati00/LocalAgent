@@ -35,7 +35,7 @@ def test_smart_candidates_are_the_verified_ollama_models_and_run_after_the_fast_
     assert cmp.PROFILES["s-gemma12"]["model"] == "gemma4:12b"
     assert cmp.PROFILES["s-gptoss20"]["model"] == "gpt-oss:20b"
     assert cmp.PROFILES["s-coder30"]["model"] == "qwen3-coder:30b"
-    assert cmp.SMART_PROFILES[-1] == "s-coder30", "o maior (19 GB, no limite da RAM) fica por último"
+    assert "s-coder30" not in cmp.SMART_PROFILES and cmp.PROFILES["s-coder30"]["model"] == "qwen3-coder:30b", "fora do padrão: não cabe na RAM"
 
 
 def test_smart_profiles_run_only_the_hard_groups_once_with_extra_time():

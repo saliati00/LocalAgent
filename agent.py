@@ -86,6 +86,9 @@ def _context_from_environment(default: int = 8192) -> int:
 
 
 NUM_CTX = _context_from_environment()
+
+# Raciocínio do modelo (think) desligado por padrão: é mais rápido e cabe na janela. A comparação liga para medir.
+THINK = os.environ.get("LOCALAGENT_THINK", "").strip().lower() in {"1", "true", "sim"}
 MAX_ITERATIONS = 30
 MAX_ESCALATIONS = 3
 
@@ -1233,7 +1236,7 @@ REGRAS:
                 model=active_model,
                 messages=prepared_messages,
                 tools=visible_tools(on_smart, enabled_groups),
-                think=False,
+                think=THINK,
                 options={"num_ctx": NUM_CTX},
             )
 
