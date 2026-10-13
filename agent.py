@@ -92,6 +92,9 @@ THINK = os.environ.get("LOCALAGENT_THINK", "").strip().lower() in {"1", "true", 
 MAX_ITERATIONS = 30
 MAX_ESCALATIONS = 3
 
+# Modo só FAST (iniciar-fast.bat, interface web): nunca escala para o SMART. O padrão do Harness não muda.
+SO_FAST = os.environ.get("LOCALAGENT_SO_FAST", "").strip().lower() in ("1", "true", "sim", "yes")
+
 # Tarefas numeradas com teste de aceite: quantas vezes o Harness roda o teste antes de pedir ajuda.
 MAX_ACCEPTANCE_ATTEMPTS = 3
 
@@ -1089,6 +1092,7 @@ REGRAS:
     smart_progress = False
     escalation_count = 0
     fast_retry_used = False
+    final_response = ""
     malformed_tool_calls = 0
 
     task_number = task_number_from_prompt(prompt)
@@ -1170,7 +1174,33 @@ REGRAS:
                 stagnation_reason=stag_reason,
             )
 
-            if escalate:
+            if escalate and SO_FAST:
+                log("ESCALATION_SKIPPED", f"modo só FAST: {esc_reason}")
+
+                if fast_retry_used or is_stagnated:
+                    reason = (
+                        f"{esc_reason} O modo só FAST não tem SMART para ajudar; "
+                        "diga o que falta ou peça de outro jeito."
+                    )
+                    state.needs_human(reason)
+                    log("NEEDS_HUMAN", reason)
+                    print(f"\n[NEEDS_HUMAN] {reason}")
+                    break
+
+                fast_retry_used = True
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "Várias ferramentas falharam seguidas. Releia as mensagens de erro acima, mude a abordagem "
+                        "(outra ferramenta, outro caminho ou arquivo reescrito por inteiro com write_file) e continue. "
+                        "Se não for possível, explique o que impede e pare."
+                    ),
+                })
+                consecutive_tool_errors = 0
+                stagnation_detector.reset()
+                response_repeats.reset()
+                state.status = "running"
+            elif escalate:
                 log("ESCALATION_CHECK", esc_reason)
                 event = stag_event or stagnation_detector.create_escalation_event(
                     phase=state.current_phase,
@@ -1508,6 +1538,7 @@ REGRAS:
 
         log("RESPONSE", content)
         state.model_response(content)
+        final_response = content
 
         print("\n[AGENT]")
         print(content)
@@ -1691,6 +1722,8 @@ Orientações:
     print(f"Ferramentas: {summary['tool_calls']}")
     print(f"Sucessos: {summary['successful_tools']}")
     print(f"Falhas: {summary['failed_tools']}")
+
+    return {"status": summary["status"], "response": final_response}
 
 
 # =========================================================

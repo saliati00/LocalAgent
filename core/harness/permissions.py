@@ -422,7 +422,15 @@ def requires_confirmation(command: str) -> bool:
     return True
 
 
+# Quem não usa o terminal (a ponte da interface web) define aqui como perguntar ao usuário:
+# uma função (command, reason) -> bool. Sem ela, a pergunta é feita no terminal, como sempre.
+CONFIRMATION_HANDLER = None
+
+
 def request_confirmation(command: str, reason: str) -> bool:
+    if CONFIRMATION_HANDLER is not None:
+        return bool(CONFIRMATION_HANDLER(command, reason))
+
     safe_print()
     safe_print("=" * 60)
     safe_print("⚠️  AÇÃO REQUER CONFIRMAÇÃO")

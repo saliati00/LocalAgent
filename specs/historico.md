@@ -437,3 +437,10 @@ Rodada `logs/comparacao/20261009_200900`, commit 539e67b, Ollama 0.40.1, ~3 h 10
 
 **Próxima rodada:** perfis `9b-kv8` e `9b-16k-kv8` (confirmam o FAST com as correções e medem o contexto maior) e `s-gemma12`, `s-gptoss20`, `par-9b+gemma12` e `par-9b+gptoss20` (decidem o SMART). Os modelos já estão baixados.
 
+# 63. MODO SÓ FAST E INTERFACE WEB (13/10/2026)
+
+* **Modo só FAST:** `LOCALAGENT_SO_FAST=1` (ligado por `iniciar-fast.bat` e `iniciar-web.bat`) desliga a escalada para o SMART. Quando as ferramentas falham em sequência, o FAST tem uma segunda chance com o erro explicado; se não resolver, a tarefa termina em `needs_human` com a explicação. Sem a variável, nada muda (os testes da escalada continuam passando).
+* **Ponte para o Open WebUI** (`scripts/ponte_web.py`, só biblioteca padrão do Python): `/v1/models` e `/v1/chat/completions` (com streaming). A última mensagem do usuário vira a tarefa; o progresso aparece como citação e depois vem a resposta final (`agent()` agora devolve `{"status", "response"}`). Confirmações viram uma pergunta no chat (SIM/NÃO) por um gancho novo, `permissions.CONFIRMATION_HANDLER`; sem o gancho, o terminal funciona como sempre. Pedidos automáticos do Open WebUI (título, tags) não rodam o agente.
+* **Instalação:** `instalar.bat` ganhou o passo 8: cria `.venv-webui` com Python 3.12 ou 3.11 (o Open WebUI não funciona no 3.13; instala o 3.12 ao lado se faltar) e instala `open-webui`. Dados em `data-webui/`. Ambos no `.gitignore`: apagar a pasta do projeto limpa tudo, exceto o Ollama, os modelos e as variáveis do q8_0, que ficam na máquina por escolha.
+* **Limites conhecidos:** uma tarefa por vez; o agente não lembra da conversa anterior (cada mensagem é uma tarefa); a ponte foi testada com um agente de mentira, e o Open WebUI de verdade só será testado no PC de casa. O que depende de variáveis do Open WebUI (`ENABLE_OLLAMA_API`, `OPENAI_API_BASE_URL`, `ENABLE_*_GENERATION`) vem de documentação e de memória; se alguma tiver mudado de nome, o sintoma é aparecerem modelos do Ollama no seletor ou o agente rodar tarefas sozinho para gerar títulos.
+
