@@ -47,12 +47,16 @@ PROFILES = {
     "4b": {"model": "qwen3.5:4b", "num_ctx": 8192, "server": {}},
     "9b-kv8": {"model": "qwen3.5:9b", "num_ctx": 8192, "server": KV8},
     "4b-16k-kv8": {"model": "qwen3.5:4b", "num_ctx": 16384, "server": KV8},
+    # O FAST escolhido com o dobro de contexto: o cache q8_0 deixa caber na placa (menos CONTEXT_NEAR_LIMIT).
+    "9b-16k-kv8": {"model": "qwen3.5:9b", "num_ctx": 16384, "server": KV8},
     "8b": {"model": "qwen3:8b", "num_ctx": 8192, "server": {}},
     # FAST com raciocínio ligado: responde o item "comparar FAST sozinho, FAST com think, SMART e cascata".
     "9b-think": {"model": "qwen3.5:9b", "num_ctx": 8192, "server": {}, "think": True, "call_timeout": 300, "timeout_factor": 2},
 }
-# Fora do padrão: 8b (já medido duas vezes e pior em raciocínio). Continua disponível por nome (--perfis 8b).
-FAST_PROFILES = ["9b", "4b", "9b-think", "9b-kv8", "4b-16k-kv8"]
+# Rodada de 09/10/2026: 9b-kv8 venceu (50/56, 63 tokens/s, 100% na GPU). O 9b sem cache q8_0 vazou 12% para a CPU
+# e quase esgotou a RAM; 4b, 9b-think e 4b-16k-kv8 ficaram atrás. Todos continuam disponíveis por nome (--perfis 4b).
+# O padrão agora só confirma o FAST escolhido (com as correções do Harness) e mede o contexto maior.
+FAST_PROFILES = ["9b-kv8", "9b-16k-kv8"]
 
 # Candidatos a SMART. Rodam só os grupos difíceis (raciocínio, tarefas reais, tarefas numeradas), uma rodada
 # cada, com mais tempo por caso e por chamada (parte do modelo fica na CPU). O que importa é acertar, não a velocidade.
@@ -65,10 +69,11 @@ PROFILES.update({
     "s-gptoss20": {"model": "gpt-oss:20b", **SMART_BASE},
     # Pareamento: o FAST (9b) tenta e, travado, entrega ao SMART com o resumo de passagem (handover).
     "par-9b+gemma12": {"model": "qwen3.5:9b", "smart_model": "gemma4:12b", **{**SMART_BASE, "grupos": "real,tarefas"}},
+    "par-9b+gptoss20": {"model": "qwen3.5:9b", "smart_model": "gpt-oss:20b", **{**SMART_BASE, "grupos": "real,tarefas"}},
     "s-coder30": {"model": "qwen3-coder:30b", **SMART_BASE},
 })
 # Fora do padrão: s-coder30 (a estimativa diz que não cabe em 16 GB de RAM; risco de travar). Disponível por nome.
-SMART_PROFILES = ["s-gemma12", "s-gptoss20", "par-9b+gemma12"]
+SMART_PROFILES = ["s-gemma12", "s-gptoss20", "par-9b+gemma12", "par-9b+gptoss20"]
 DEFAULT_PROFILES = FAST_PROFILES + SMART_PROFILES
 PROFILE_GROUPS = {"fast": FAST_PROFILES, "smart": SMART_PROFILES, "tudo": DEFAULT_PROFILES}
 
@@ -77,6 +82,8 @@ MIN_ACCEPTABLE_TOK_S = 15
 SMOKE_TIMEOUT_SECONDS = 180
 MODEL_TIME_LIMIT_SECONDS = 6000
 UNLOAD_WAIT_SECONDS = 40
+SMOKE_ATTEMPTS = 2
+SMOKE_RETRY_WAIT_SECONDS = 20
 
 # Uma rodada que não terminou é retomada sozinha na próxima execução (se for recente e pedir os mesmos perfis).
 RUN_FILE = "rodada.json"
@@ -503,6 +510,32 @@ def confirm_downloads(missing: list[str], assume_yes: bool) -> bool:
         return input("Baixar agora? (S/N): ").strip().lower().startswith("s")
     except (EOFError, OSError):
         return False
+
+
+def loaded_models(url: str = DEFAULT_URL) -> list[str]:
+    """Nomes que o `ollama ps` mostra carregados no servidor."""
+
+    _, listing = run_cmd(["ollama", "ps"], env=server_env(url))
+    lines = [line.split() for line in listing.splitlines()[1:] if line.strip()]
+
+    return [parts[0] for parts in lines if parts]
+
+
+def free_gpu() -> None:
+    """Descarrega tudo do Ollama normal: um modelo esquecido ali ocupa a VRAM que o próximo precisa."""
+
+    for name in loaded_models():
+        stop_model(name)
+        wait_unloaded(name)
+
+
+def keep_failed_server_log(folder: Path, attempt: int) -> None:
+    """A nova tentativa reescreve servidor-ollama.log; guarda o da falha para o diagnóstico."""
+
+    log = folder / "servidor-ollama.log"
+
+    if log.exists():
+        log.replace(folder / f"servidor-ollama-falha-{attempt}.log")
 
 
 def wait_unloaded(model: str, seconds: int = UNLOAD_WAIT_SECONDS, url: str = DEFAULT_URL) -> bool:
@@ -1142,16 +1175,26 @@ def run_model(profile: dict, root: Path, args, entries: list[dict], resume: bool
         return
 
     try:
-        with server_for(profile, folder) as url:
-            smoke = smoke_test(model, url, profile.get("num_ctx", 8192), bool(profile.get("think")))
-            print(f"    respondeu: {'sim' if smoke['ok'] else 'NÃO'} | chamou ferramenta: {'sim' if smoke['tool_call'] else 'NÃO'} | {smoke['seconds']} s {smoke['error']}")
+        for attempt in range(1, SMOKE_ATTEMPTS + 1):
+            with server_for(profile, folder) as url:
+                smoke = smoke_test(model, url, profile.get("num_ctx", 8192), bool(profile.get("think")))
+                print(f"    respondeu: {'sim' if smoke['ok'] else 'NÃO'} | chamou ferramenta: {'sim' if smoke['tool_call'] else 'NÃO'} | {smoke['seconds']} s {smoke['error']}")
 
-            if not smoke["ok"]:
-                entries.append({"label": label, "results": [], "meta": {}, "profile": profile, "smoke": smoke, "skipped": "incompatível: " + smoke["error"]})
-                return
+                if smoke["ok"]:
+                    print(f"=== {label}: bateria completa ===")
+                    run_one(profile, folder, args, resume=resume and has_progress(folder), url=url)
+                    break
 
-            print(f"=== {label}: bateria completa ===")
-            run_one(profile, folder, args, resume=resume and has_progress(folder), url=url)
+            if attempt < SMOKE_ATTEMPTS:
+                # Falha ao carregar costuma ser passageira (na rodada de 09/10 o gemma4 caiu com erro de CUDA
+                # no perfil próprio e carregou normalmente no perfil seguinte). Libera a placa e tenta de novo.
+                keep_failed_server_log(folder, attempt)
+                print(f"    o modelo não carregou; liberando a placa e tentando de novo em {SMOKE_RETRY_WAIT_SECONDS} s")
+                free_gpu()
+                time.sleep(SMOKE_RETRY_WAIT_SECONDS)
+        else:
+            entries.append({"label": label, "results": [], "meta": {}, "profile": profile, "smoke": smoke, "skipped": "incompatível: " + smoke["error"]})
+            return
     except RuntimeError as exc:
         entries.append({"label": label, "results": [], "meta": {}, "profile": profile, "skipped": str(exc)})
         return

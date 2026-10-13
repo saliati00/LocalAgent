@@ -1,5 +1,5 @@
 {
-  "active_fast_model": "qwen3:8b",
+  "active_fast_model": "qwen3.5:9b",
   "active_smart_model": null,
   "models": {
     "qwen3:8b": {
@@ -9,8 +9,9 @@
       "size_gb": 5.2,
       "vram_gb": 5.5,
       "context_window": 32768,
-      "status": "installed",
-      "description": "Modelo operador rápido para tarefas rotineiras, ferramentas básicas e inspeção."
+      "status": "retired",
+      "description": "Modelo operador rápido para tarefas rotineiras, ferramentas básicas e inspeção.",
+      "justification": "Bootstrap até 09/10/2026; substituído pelo qwen3.5:9b, melhor em raciocínio nas três comparações."
     },
     "qwen3.5:9b": {
       "name": "Qwen3.5 9B",
@@ -19,9 +20,14 @@
       "size_gb": 6.6,
       "vram_gb": 6.4,
       "context_window": 262144,
-      "status": "candidate",
+      "status": "adopted",
       "description": "Candidato a FAST: o mais preciso nas comparações (raciocínio 11/12).",
-      "justification": "Segunda comparação (08/10/2026): 40/44 (91%), raciocínio 11/12, ~51 tokens/s, 12% na CPU com contexto 8192."
+      "justification": "Terceira comparação (09/10/2026, logs/comparacao/20261009_200900): com o cache de KV em q8_0 e flash attention (perfil 9b-kv8) passou 50/56 (89%), raciocínio 12/12, segurança 9/9, ~63 tokens/s, 5,6 GB e 100% na GPU. Sem o cache q8_0 o mesmo modelo usa 6,4 GB, vaza 12% para a CPU e quase esgota a RAM. Exige OLLAMA_FLASH_ATTENTION=1 e OLLAMA_KV_CACHE_TYPE=q8_0 (o instalar.bat configura).",
+      "server_env": {
+        "OLLAMA_FLASH_ATTENTION": "1",
+        "OLLAMA_KV_CACHE_TYPE": "q8_0"
+      },
+      "num_ctx": 8192
     },
     "qwen3.5:4b": {
       "name": "Qwen3.5 4B",
@@ -30,9 +36,9 @@
       "size_gb": 3.4,
       "vram_gb": 3.3,
       "context_window": 262144,
-      "status": "candidate",
+      "status": "rejected",
       "description": "Candidato a FAST: duas vezes mais rápido e com metade da VRAM do 9B.",
-      "justification": "Segunda comparação (08/10/2026): 38/44 (86%), raciocínio 9/12, ~99 tokens/s, 100% na GPU (3,3 GB)."
+      "justification": "Terceira comparação (09/10/2026): 44/56 (79%) a ~99 tokens/s; com 16k de contexto caiu para 38/56 (68%). Mais rápido, mas erra mais nas tarefas reais (12/20 contra 14/20 do 9b-kv8) e falhou um caso de segurança."
     },
     "gemma4:12b": {
       "name": "Gemma 4 12B",
@@ -43,7 +49,7 @@
       "context_window": 262144,
       "status": "candidate",
       "description": "Candidato a SMART denso; o mais provável de caber quase inteiro na RTX 3070.",
-      "justification": "Disponível no Ollama com ferramentas e raciocínio configurável; estimativa de ~15% na CPU e ~14 tokens/s (scripts/estimar_desempenho.py). Aguarda a bateria."
+      "justification": "Terceira comparação (09/10/2026): no perfil próprio o servidor caiu ao carregar (erro de CUDA, 0xc0000409); no par com o qwen3.5:9b carregou e destravou 2 tarefas. Precisa de uma rodada própria."
     },
     "gpt-oss:20b": {
       "name": "gpt-oss 20B",
@@ -54,7 +60,7 @@
       "context_window": 131072,
       "status": "candidate",
       "description": "Candidato a SMART MoE (poucos parâmetros ativos por token).",
-      "justification": "Disponível no Ollama com ferramentas e raciocínio; estimativa de ~50% na CPU e ~19 tokens/s graças aos poucos parâmetros ativos. Aguarda a bateria."
+      "justification": "Terceira comparação (09/10/2026): 15/20 nos grupos difíceis (raciocínio 6/6, tarefas reais 5/10), ~30 tokens/s, 56% na CPU. Resultado contaminado: o Harness mandava escolher o SMART no meio das tarefas (corrigido); 3 casos alteraram o registry por isso. Precisa de nova rodada."
     }
   }
 }

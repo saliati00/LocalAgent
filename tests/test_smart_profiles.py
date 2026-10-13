@@ -57,7 +57,7 @@ def test_the_paired_profile_is_a_fast_model_that_escalates_to_a_smart_one():
 def test_profile_groups_expand_and_deduplicate():
     assert [p["label"] for p in cmp.resolve_profiles(args(perfis="smart"))] == cmp.SMART_PROFILES
     assert [p["label"] for p in cmp.resolve_profiles(args())] == cmp.DEFAULT_PROFILES
-    assert [p["label"] for p in cmp.resolve_profiles(args(perfis="9b,fast"))] == cmp.FAST_PROFILES
+    assert [p["label"] for p in cmp.resolve_profiles(args(perfis="9b-kv8,fast"))] == cmp.FAST_PROFILES
 
 
 def test_download_sizes_are_known_for_every_model_of_every_profile():

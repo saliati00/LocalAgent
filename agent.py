@@ -802,6 +802,23 @@ def answer_skipped_tool_calls(messages: list, skipped_calls, reason: str) -> Non
 # EXECUÇÃO DO AGENTE
 # =========================================================
 
+MAX_MALFORMED_TOOL_CALLS = 2
+
+MALFORMED_TOOL_CALL_HINT = (
+    "Sua última chamada de ferramenta veio com erro de sintaxe e não foi executada. "
+    "Os argumentos precisam ser valores literais em JSON (texto entre aspas, sem '+', sem código "
+    "e sem montar strings). Para trocar um trecho grande, use write_file com o arquivo inteiro. "
+    "Chame a ferramenta de novo, corrigida."
+)
+
+
+def is_malformed_tool_call(error: Exception) -> bool:
+    """O Ollama devolve 500 quando não consegue ler a chamada de ferramenta que o modelo escreveu."""
+
+    text = str(error)
+    return "error parsing tool call" in text or "XML syntax error" in text
+
+
 def agent(prompt: str):
 
     # =========================================================
@@ -1071,6 +1088,8 @@ REGRAS:
     smart_iterations = 0
     smart_progress = False
     escalation_count = 0
+    fast_retry_used = False
+    malformed_tool_calls = 0
 
     task_number = task_number_from_prompt(prompt)
     acceptance_args = acceptance_command(task_number) if task_number else None
@@ -1215,6 +1234,25 @@ REGRAS:
                     response_repeats.reset()
                     state.status = "running"
                     log("ESCALATED", f"Tarefa entregue ao modelo especialista SMART: {active_model}")
+                elif not is_stagnated and not fast_retry_used:
+                    # Escalada por erros de ferramenta (não por loop): sem SMART, o FAST ganha
+                    # uma segunda chance com o erro explicado, em vez de a tarefa morrer ali.
+                    fast_retry_used = True
+                    log("SMART_UNAVAILABLE", json.dumps(smart_diag, ensure_ascii=False))
+                    log("FAST_RETRY", "SMART indisponível; o FAST tenta de novo com uma abordagem diferente.")
+                    print(f"\n[SMART_UNAVAILABLE] {smart_reason} O FAST tenta de novo.")
+                    messages.append({
+                        "role": "user",
+                        "content": (
+                            "Várias ferramentas falharam seguidas e não há modelo SMART para ajudar. "
+                            "Releia as mensagens de erro acima, mude a abordagem (outra ferramenta, outro caminho "
+                            "ou arquivo reescrito por inteiro com write_file) e continue a tarefa."
+                        ),
+                    })
+                    consecutive_tool_errors = 0
+                    stagnation_detector.reset()
+                    response_repeats.reset()
+                    state.status = "running"
                 else:
                     state.resolve_escalation_smart_unavailable(smart_diag, reason=smart_reason)
                     log("SMART_UNAVAILABLE", json.dumps(smart_diag, ensure_ascii=False))
@@ -1267,6 +1305,14 @@ REGRAS:
                 context_mgr.request_compaction()
 
         except Exception as e:
+            if is_malformed_tool_call(e) and malformed_tool_calls < MAX_MALFORMED_TOOL_CALLS:
+                # O modelo escreveu a chamada de ferramenta com erro de sintaxe e o Ollama a rejeitou.
+                # A tarefa não está perdida: explica e deixa o modelo tentar de novo.
+                malformed_tool_calls += 1
+                log("MALFORMED_TOOL_CALL", f"{malformed_tool_calls}/{MAX_MALFORMED_TOOL_CALLS} | {str(e)[:300]}")
+                messages.append({"role": "user", "content": MALFORMED_TOOL_CALL_HINT})
+                continue
+
             state.fail(f"Erro ao consultar o modelo: {e}")
             log("STOP", f"Erro ao consultar o modelo: {e}")
             print(f"\n[ERROR] Falha ao consultar o modelo: {e}")
@@ -1531,6 +1577,7 @@ REGRAS:
                         f"A última ação de ferramenta ({state.last_tool}) falhou ou foi bloqueada pelo Harness. "
                         "A tarefa não pode ser concluída com erro pendente. Ajuste a abordagem e prossiga."
                     ),
+                    include_guidance=is_dev_task,
                 ),
             }
         elif is_dev_task and state.next_action:
@@ -1553,6 +1600,7 @@ REGRAS:
                 actions_completed=state.actions_completed,
                 last_tool_success=state.last_tool_success,
                 last_failure_reason=state.last_failure_reason,
+                include_guidance=is_dev_task,
             )
 
         log("COMPLETION", f"{completion['status']} | {completion['reason']}")
@@ -1578,6 +1626,18 @@ REGRAS:
             messages.append({"role": "user", "content": completion["reason"]})
             continue
 
+        if is_dev_task:
+            last_steps = (
+                "3. Se desejar confirmar o estado e a próxima ação do projeto, use 'get_project_status'.\n"
+                "4. Realize o trabalho prático da pendência atual e, após validar, registre-a com 'update_spec_checklist'."
+            )
+        else:
+            # Tarefa avulsa: falar de checklist ou de fase do projeto desvia o modelo do pedido.
+            last_steps = (
+                "3. Faça só o que a tarefa pede; não mexa em specs/, models/ nem memory/.\n"
+                "4. Confira o resultado (rode o programa ou os testes) e então responda."
+            )
+
         messages.append({
             "role": "user",
             "content": f"""
@@ -1589,8 +1649,7 @@ Etapa imediata atual: {effective_goal}
 Orientações:
 1. NÃO repita comandos ou verificações já executados com sucesso recentemente.
 2. Se a ferramenta anterior falhou ou foi bloqueada pelo Harness, NÃO insista na mesma chamada com os mesmos argumentos.
-3. Se desejar confirmar o estado e a próxima ação do projeto, use 'get_project_status'.
-4. Realize o trabalho prático da pendência atual e, após validar, registre-a com 'update_spec_checklist'.
+{last_steps}
 """
         })
 

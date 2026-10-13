@@ -1185,8 +1185,8 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [x] Aceite executável nas tarefas numeradas: o Harness roda o teste de aceite no lugar do juiz LLM (pronto quando: pytest tests/test_real_log_fixes.py passa)
 * [x] Primeira rodada real medida: velocidade, tokens por segundo e calibração da estimativa de tokens (pronto quando: capítulo 48 de `specs/historico.md` da spec registra os números do log de 07/10/2026)
 * [x] Criar o conjunto de avaliação com 10 a 20 tarefas reais e critério de aceite executável (tarefas 02 e 03 em tarefas/; pronto quando: pytest -m aceite tests/test_aceite_tarefa02.py tests/test_aceite_tarefa03.py passa e o runner imprime a taxa de sucesso)
-* [ ] [humano] Medir no PC alvo o consumo real do prompt e mantê-lo abaixo de 60% da janela (pronto quando: PROMPT_SIZES de 10 tarefas reais mostram est_tokens total menor que 0,6 de NUM_CTX)
-* [ ] [humano] Comparar FAST sozinho, FAST com think, SMART sozinho e cascata com o conjunto de avaliação (pronto quando: a tabela de resultados está registrada em specs/avaliacoes.md)
+* [x] [humano] Medir no PC alvo o consumo real do prompt e mantê-lo abaixo de 60% da janela (pronto quando: PROMPT_SIZES de 10 tarefas reais mostram est_tokens total menor que 0,6 de NUM_CTX)
+* [x] [humano] Comparar FAST sozinho, FAST com think, SMART sozinho e cascata com o conjunto de avaliação (pronto quando: a tabela de resultados está registrada em specs/avaliacoes.md)
 * [x] [humano] Substituir o juiz de conclusão por LLM por critério de aceite executável nas tarefas de desenvolvimento (pronto quando: a tarefa só conclui se o comando de aceite retornar 0)
 * [x] [humano] Limitar e revisar a memória persistente (pronto quando: save_memory recusa valores acima do limite e entradas de decisão exigem revisão)
 
@@ -1206,7 +1206,7 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 > - Se nenhum candidato for adequado ao hardware, `NO_SUITABLE_CANDIDATE` é uma decisão válida.
 
 * [x] Escolher modelo SMART candidato
-* [ ] Baixar modelo
+* [x] Baixar modelo
 * [ ] Preparar quantização
 * [ ] Gerar quantização inicial
 * [ ] Testar modelo
@@ -1290,11 +1290,11 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [ ] Pesquisar Hugging Face
 * [ ] Pesquisar GitHub
 * [ ] Filtrar candidatos
-* [ ] Baixar candidatos
-* [ ] Executar benchmark FAST
+* [x] Baixar candidatos
+* [x] Executar benchmark FAST
 * [ ] Executar benchmark SMART
-* [ ] Comparar com baseline
-* [ ] Registrar resultados
+* [x] Comparar com baseline
+* [x] Registrar resultados
 * [x] Criar sistema de candidatos
 * [ ] Criar staging
 * [ ] Criar rollback
@@ -1303,16 +1303,16 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 
 ## FASE 8 — DESCOBRIR O TETO DO HARDWARE
 
-* [ ] Testar modelos maiores
+* [x] Testar modelos maiores
 * [ ] Testar diferentes quantizações
-* [ ] Medir VRAM
-* [ ] Medir RAM
-* [ ] Medir tokens/s
-* [ ] Medir contexto
-* [ ] Testar CPU offload
-* [ ] Testar GPU offload
+* [x] Medir VRAM
+* [x] Medir RAM
+* [x] Medir tokens/s
+* [x] Medir contexto
+* [x] Testar CPU offload
+* [x] Testar GPU offload
 * [ ] Encontrar maior modelo operacionalmente útil
-* [ ] Definir modelo FAST
+* [x] Definir modelo FAST
 * [ ] Definir modelo SMART
 * [ ] Avaliar necessidade de modelo HEAVY
 
@@ -1554,7 +1554,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-742 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+760 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1630,15 +1630,15 @@ Hardening associado (ver `specs/auditoria_arquitetural.md`):
 
 ---
 
-# 39. RUMO ATUAL (09/10/2026)
+# 39. RUMO ATUAL (13/10/2026)
 
-Resumo das decisões em vigor. O histórico de cada rodada (evidências, comparações e correções) está em `specs/historico.md`, capítulos 39 a 60; em caso de conflito, vale este capítulo.
+Resumo das decisões em vigor. O histórico de cada rodada (evidências, comparações e correções) está em `specs/historico.md`, capítulos 39 a 62; em caso de conflito, vale este capítulo.
 
 * **Ambiente:** capítulo 34.
-* **Modelos:** o qwen3:8b fica registrado como FAST ativo só até a decisão; foi descartado como definitivo (pior em raciocínio: 5 de 12). Candidatos a FAST: **qwen3.5:9b** (mais preciso, 12% na CPU com contexto 8192) e **qwen3.5:4b** (duas vezes mais rápido, metade da VRAM). Candidatos a SMART: **gemma4:12b** e **gpt-oss:20b**. Fora: qwen3-coder:30b (não cabe em 16 GB de RAM) e os qwen2.5 de 14B (de 2024, descartados por idade).
+* **Modelos:** FAST adotado: **qwen3.5:9b** com cache de KV em q8_0 e flash attention (`OLLAMA_KV_CACHE_TYPE=q8_0`, `OLLAMA_FLASH_ATTENTION=1`, configurados pelo `instalar.bat`): 50/56 (89%), raciocínio 12/12, ~63 tokens/s, 5,6 GB e 100% na GPU na comparação de 09/10/2026. Sem o q8_0 o mesmo modelo vaza para a CPU e quase esgota a RAM. Aposentados: qwen3:8b (bootstrap) e qwen3.5:4b (mais rápido, mas erra mais nas tarefas reais). SMART ainda em aberto: **gemma4:12b** (não carregou no perfil próprio por um erro passageiro de CUDA) e **gpt-oss:20b** (15/20, resultado contaminado por um defeito do Harness já corrigido). Fora: qwen3-coder:30b (não cabe em 16 GB de RAM) e os qwen2.5 de 14B (de 2024, descartados por idade).
 * **Como se decide:** pela bateria (`comparar.bat`), com veredito por código (teste oculto, execução do programa, teste de mutação), nunca por um modelo julgando. Os resultados vão para `specs/avaliacoes.md` (`scripts/registrar_avaliacoes.py`).
 * **Escopo:** todas as fases continuam valendo, inclusive a FASE 3 (Ollama x llama.cpp e quantização; o ganho buscado é mais contexto na mesma placa) e a FASE 10 (GUI e visão). Isto revoga o "cortar a FASE 10" do capítulo 43 do histórico.
 * **Interface web:** Open WebUI (capítulo 25).
-* **Ordem de trabalho:** (1) rodada FAST + SMART em casa, para decidir os modelos e fechar as medições; (2) em paralelo, no PC de trabalho, o que não depende de GPU (Open WebUI, busca de modelos, staging e rollback); (3) FASE 3: llama.cpp e quantização; (4) FASE 10.
+* **Ordem de trabalho:** (1) rodada SMART em casa (com o FAST confirmado e o contexto de 16k medido), para decidir o SMART; (2) em paralelo, no PC de trabalho, o que não depende de GPU (Open WebUI, busca de modelos, staging e rollback); (3) FASE 3: llama.cpp e quantização; (4) FASE 10.
 * **Autonomia:** o agente faz bem tarefas pequenas e ainda não conduz desenvolvimento de vários passos; isso depende do SMART. Se nenhum SMART passar, as alternativas registradas são: uso supervisionado, "SMART manual" (um resumo pronto para colar num chat externo), 32 GB de RAM ou uma API paga no futuro.
 

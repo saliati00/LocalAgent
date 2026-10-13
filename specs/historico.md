@@ -406,3 +406,34 @@ Bateria enxuta (o tempo de PC vai para o que decide):
 * Decisões do usuário: a FASE 10 (GUI e visão) e a FASE 3 (llama.cpp e quantização) continuam no escopo, revogando o "cortar" do capítulo 43; a interface web será o Open WebUI ("Escolher interface/harness web" marcado).
 * `models/registry.json`: saíram os candidatos `qwen2.5:14b` e `qwen2.5-coder:14b` (de 2024, descartados por idade); entraram `qwen3.5:9b` e `qwen3.5:4b` (FAST) e `gemma4:12b` e `gpt-oss:20b` (SMART), todos como `candidate`, com a justificativa medida ou estimada. O `qwen3:8b` segue como FAST ativo só até a decisão.
 * `memory/store.json`: removidos os fatos do Fedora e as decisões de modelo superadas, que entravam no prompt de toda tarefa.
+
+# 62. TERCEIRA COMPARAÇÃO E DECISÃO DO FAST (09/10/2026, analisada em 13/10/2026)
+
+Rodada `logs/comparacao/20261009_200900`, commit 539e67b, Ollama 0.40.1, ~3 h 10 min (bem menos que as 8 a 13 h estimadas).
+
+| Perfil | Aprovação | Raciocínio | Tarefas reais | tokens/s | Na placa |
+|---|---|---|---|---|---|
+| 9b-kv8 | 50/56 (89%) | 12/12 | 14/20 | 63,4 | 5,6 GB, 100% GPU |
+| 9b | 48/56 (86%) | 9/12 | 15/20 | 51,0 | 6,4 GB, 12% CPU; RAM livre caiu a 522 MB e o vigia interrompeu o último caso |
+| 9b-think | 47/56 (84%) | 12/12 | 12/20 | 50,6 | 12% CPU |
+| 4b | 44/56 (79%) | 9/12 | 12/20 | 99,2 | 3,3 GB, 100% GPU |
+| 4b-16k-kv8 | 38/56 (68%) | 8/12 | 7/20 | 97,2 | 3,4 GB, 100% GPU |
+| s-gptoss20 | 15/20 (75%) | 6/6 | 5/10 | 30,5 | 14 GB, 56% CPU |
+| par-9b+gemma12 | 9/14 (64%) | - | 8/10 | 61,5 | gemma carregou e destravou 2 tarefas |
+| s-gemma12 | não rodou | | | | erro de CUDA ao carregar (0xc0000409) |
+
+**Decisão:** FAST = qwen3.5:9b com cache de KV q8_0 + flash attention. O q8_0 não piorou a nota e foi o que fez o modelo caber inteiro na placa (mais rápido e sem pressão na RAM). Registrado em `models/registry.json` com `server_env`; o `instalar.bat` grava as duas variáveis no Windows e reinicia o Ollama.
+
+**Defeitos do Harness encontrados e corrigidos:**
+
+1. A orientação da fase do projeto ("selecione um SMART com `set_smart_candidate_for_benchmark`") era anexada a toda mensagem de continuação, até em tarefas avulsas: 55 casos receberam a ordem. O gpt-oss obedeceu e alterou o `models/registry.json` em 3 casos (as 3 violações). Agora a orientação de fase só vai para o desenvolvimento do checklist, e as tarefas avulsas recebem "faça só o que foi pedido".
+2. `cd PASTA && comando` era recusado (89 de 92 comandos com `&&`). Agora o Harness aceita esse formato para pastas dentro de `workspace/` e roda o comando com a pasta como diretório de trabalho. Fora de `workspace/` continua recusado, para não contornar a proteção de arquivos.
+3. Uma chamada de ferramenta malformada (o Ollama responde 500: "error parsing tool call" ou "XML syntax error") encerrava a tarefa. Agora o modelo recebe a explicação e tenta de novo (até 2 vezes).
+4. Sem SMART, a primeira escalada encerrava a tarefa. Agora, se a escalada veio de erros de ferramenta (e não de loop), o FAST tem uma segunda chance com o erro explicado.
+5. O comparativo dava o modelo como incompatível na primeira falha de carga. Agora libera a placa e tenta de novo; o log da falha fica em `servidor-ollama-falha-1.log`.
+6. `scripts/registrar_avaliacoes.py` rotulava as linhas pelo nome do modelo (todas viravam "FAST sozinho"); agora usa o nome do perfil.
+
+**Medições que fecham itens:** o maior prompt fixo foi de 4188 tokens (51% de 8192; meta: menos de 60%). Também foram medidos VRAM, RAM, tokens/s, CPU e GPU offload, contexto de 8k e 16k, modelos maiores (12B e 20B) e o comparativo FAST/think/SMART/cascata (`specs/avaliacoes.md`). Ficaram 15 itens marcados no checklist.
+
+**Próxima rodada:** perfis `9b-kv8` e `9b-16k-kv8` (confirmam o FAST com as correções e medem o contexto maior) e `s-gemma12`, `s-gptoss20`, `par-9b+gemma12` e `par-9b+gptoss20` (decidem o SMART). Os modelos já estão baixados.
+

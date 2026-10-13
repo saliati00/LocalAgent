@@ -296,6 +296,43 @@ def _inside_project(arg: str) -> Path | None:
     return candidate if candidate == root or root in candidate.parents else None
 
 
+def _split_leading_cd(command: str) -> tuple[Path | None, str, str | None]:
+    """
+    'cd PASTA && comando' é o jeito mais comum de os modelos rodarem algo numa subpasta
+    (89 de 92 comandos com '&&' na última comparação). Com shell=False isso não roda;
+    o Harness entende o padrão e executa só o comando, com a pasta como diretório de trabalho.
+
+    Devolve (pasta, comando, erro). Sem o padrão: (None, command, None).
+    """
+
+    stripped = command.strip()
+
+    if not stripped.lower().startswith("cd ") or "&&" not in stripped:
+        return None, command, None
+
+    head, rest = stripped[3:].split("&&", 1)
+    rest = rest.strip()
+
+    if not head.strip() or not rest:
+        return None, command, None
+
+    folder = _inside_project(head.strip().strip('"').strip("'"))
+    workspace = WORKSPACE_DIR.resolve()
+
+    # Só dentro de workspace/: a checagem de arquivos protegidos olha caminhos a partir da raiz,
+    # e um 'cd core && ...' a contornaria.
+    if folder is None or (folder != workspace and workspace not in folder.parents):
+        return None, command, (
+            "'cd PASTA && comando' só é aceito para pastas dentro de workspace/. "
+            "Fora dela, rode o comando a partir da raiz do projeto, sem 'cd'."
+        )
+
+    if not folder.is_dir():
+        return None, command, f"A pasta do 'cd' não existe: {_relative(folder)}."
+
+    return folder, rest, None
+
+
 def _relative(path: Path) -> str:
     try:
         return str(path.relative_to(PROJECT_ROOT.resolve())).replace("\\", "/") or "."
@@ -477,6 +514,15 @@ def run_command(
             "tool_error": True,
         }
 
+    workdir, command, cd_error = _split_leading_cd(command)
+
+    if cd_error:
+        return {
+            "success": False,
+            "error": cd_error,
+            "tool_error": True,
+        }
+
     parts, parse_error = parse_command(command)
 
     if parse_error:
@@ -505,21 +551,25 @@ def run_command(
     if constraint_error is not None:
         return constraint_error
 
-    made = _make_workspace_dirs(parts)
+    # Os atalhos do Harness resolvem caminhos a partir da raiz; com 'cd' o comando segue o fluxo normal.
+    if workdir is None:
+        made = _make_workspace_dirs(parts)
 
-    if made is not None:
-        return made
+        if made is not None:
+            return made
 
-    native = _native_read_only(parts)
+        native = _native_read_only(parts)
 
-    if native is not None:
-        return native
+        if native is not None:
+            return native
 
     # ---------------------------------------------------------
     # Permission Manager
     # ---------------------------------------------------------
 
-    if not authorize(command, reason):
+    shown_reason = reason if workdir is None else f"{reason} (na pasta {_relative(workdir)})"
+
+    if not authorize(command, shown_reason):
         return {
             "success": False,
             "cancelled": True,
@@ -550,7 +600,7 @@ def run_command(
             text=True,
             timeout=300,
             shell=False,
-            cwd=str(PROJECT_ROOT),
+            cwd=str(workdir or PROJECT_ROOT),
             env=env,
         )
 

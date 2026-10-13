@@ -7,8 +7,8 @@ def test_model_router_default_uses_fast():
     """Por padrão, o router usa o modelo FAST registrado no registry.json."""
     router = ModelRouter()
     model = router.route_task("Liste os arquivos no diretorio")
-    # O registry.json real possui active_fast_model = "qwen3:8b"
-    assert model == "qwen3:8b"
+    # O registry.json real possui active_fast_model = "qwen3.5:9b" (adotado em 09/10/2026)
+    assert model == "qwen3.5:9b"
 
 
 def test_model_router_fast_model_from_registry(tmp_path):
@@ -225,13 +225,12 @@ def test_model_router_register_fast_candidate(tmp_path):
 
 
 def test_model_router_qwen3_8b_remains_installed():
-    """qwen3:8b continua registrado no registry como fast/installed (não adopted via lifecycle)."""
+    """qwen3:8b continua registrado como fast, aposentado (nunca 'adopted': era só o bootstrap)."""
     router = ModelRouter()
     models = router.list_models()
     assert "qwen3:8b" in models
     assert models["qwen3:8b"]["role"] == "fast"
-    assert models["qwen3:8b"]["status"] == "installed"
-    # qwen3:8b não possui status "adopted" — nunca passou pelo lifecycle formal
+    assert models["qwen3:8b"]["status"] == "retired"
     assert models["qwen3:8b"]["status"] != "adopted"
 
 

@@ -24,7 +24,8 @@ def test_the_next_action_is_never_a_human_item_while_the_agent_has_something_to_
     progress = extract_project_progress(str(PROJECT_SPEC_PATH))
     doable = [entry for entry in progress["pending"] if entry not in progress["human_pending"]]
 
-    assert progress["human_pending"], "os itens [humano] da FASE 11 continuam pendentes"
+    # Os dois itens [humano] da FASE 11 foram fechados pela comparação de 09/10/2026; o pulo deles
+    # continua coberto pelo teste seguinte, com uma especificação de exemplo.
     assert doable, "ainda há itens que o agente pode fazer"
     assert not progress["next_action"].lower().startswith("[humano]")
     assert progress["next_action"] == doable[0]["item"]

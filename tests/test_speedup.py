@@ -27,7 +27,7 @@ def test_simple_cases_run_once_and_the_discriminating_groups_twice():
 
 def test_default_profiles_drop_what_was_already_decided_and_add_think():
     assert "8b" not in cmp.DEFAULT_PROFILES and "s-coder30" not in cmp.DEFAULT_PROFILES
-    assert "9b-think" in cmp.FAST_PROFILES
+    assert "9b-think" in cmp.PROFILES and "9b-16k-kv8" in cmp.FAST_PROFILES
     assert cmp.PROFILES["9b-think"]["think"] is True
 
 

@@ -46,7 +46,7 @@ def test_the_checklist_still_parses_and_the_web_interface_choice_is_ticked():
 def test_the_registry_lists_the_current_candidates_with_justification():
     models = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))["models"]
 
-    for name, role in (("qwen3.5:9b", "fast"), ("qwen3.5:4b", "fast"), ("gemma4:12b", "smart"), ("gpt-oss:20b", "smart")):
+    for name, role in (("gemma4:12b", "smart"), ("gpt-oss:20b", "smart")):
         assert models[name]["role"] == role and models[name]["status"] == "candidate" and models[name]["justification"], name
 
     assert "qwen2.5:14b" not in models and "qwen2.5-coder:14b" not in models

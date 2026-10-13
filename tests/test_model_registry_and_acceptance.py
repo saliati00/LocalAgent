@@ -517,24 +517,22 @@ def test_fast_candidate_for_benchmark_requires_existing_model(tmp_path, monkeypa
 
 
 def test_qwen3_8b_not_automatically_adopted(monkeypatch):
-    """qwen3:8b não é automaticamente adopted — status deve permanecer 'installed'."""
+    """O bootstrap qwen3:8b nunca virou 'adopted': saiu de cena quando a bateria escolheu o sucessor."""
     from tools.models import get_model_registry
     reg = get_model_registry(role="fast")
     assert "qwen3:8b" in reg["models"]
-    # qwen3:8b é bootstrap sem lifecycle formal: status deve ser "installed", não "adopted"
-    assert reg["models"]["qwen3:8b"]["status"] == "installed"
+    assert reg["models"]["qwen3:8b"]["status"] == "retired"
     assert reg["models"]["qwen3:8b"]["status"] != "adopted"
 
 
 def test_qwen3_8b_continues_installed():
-    """qwen3:8b continua instalado e acessível — não foi removido, reinstalado ou alterado."""
+    """qwen3:8b continua registrado (histórico); o FAST ativo é o adotado pela comparação de 09/10/2026."""
     from tools.models import get_model_registry
     reg = get_model_registry()
     assert "qwen3:8b" in reg["models"]
     assert reg["models"]["qwen3:8b"]["role"] == "fast"
-    assert reg["models"]["qwen3:8b"]["status"] == "installed"
-    # active_fast_model ainda aponta para qwen3:8b (bootstrap)
-    assert reg["active_fast_model"] == "qwen3:8b"
+    assert reg["active_fast_model"] == "qwen3.5:9b"
+    assert reg["models"]["qwen3.5:9b"]["status"] == "adopted"
 
 
 def test_smart_lifecycle_still_works(tmp_path, monkeypatch):

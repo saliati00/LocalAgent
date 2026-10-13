@@ -19,6 +19,7 @@ import comparar_modelos as cmp  # noqa: E402
 
 OUTPUT = ROOT / "specs" / "avaliacoes.md"
 CATEGORY_BY_LABEL = {"9b-think": "FAST com think"}
+LABEL_BY_FOLDER = {cmp.slug(label): label for label in cmp.PROFILES}
 
 
 def category(label: str) -> str:
@@ -57,7 +58,8 @@ def collect_all(folders: list[Path]) -> list[dict]:
 
     for folder in folders:
         for child in sorted(p for p in folder.iterdir() if p.is_dir()):
-            entry = cmp.collect(child)
+            # O nome do perfil vem da pasta (o meta.json só tem o modelo, igual em 9b, 9b-kv8 e 9b-think).
+            entry = cmp.collect(child, label=LABEL_BY_FOLDER.get(child.name, child.name))
 
             if entry is not None:
                 entries.append(entry)

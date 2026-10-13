@@ -208,11 +208,55 @@ try {
     $model = "qwen3:8b"
     $registry = Join-Path $Root "models\registry.json"
 
+    $serverEnv = $null
+
     if (Test-Path $registry) {
         try {
-            $configured = (Get-Content $registry -Raw -Encoding UTF8 | ConvertFrom-Json).active_fast_model
+            $registryData = Get-Content $registry -Raw -Encoding UTF8 | ConvertFrom-Json
+            $configured = $registryData.active_fast_model
             if ($configured) { $model = $configured }
+            $entry = $registryData.models.PSObject.Properties[$model]
+            if ($entry) { $serverEnv = $entry.Value.server_env }
         } catch { }
+    }
+
+    # Configuracao do servidor que o modelo exige (ex.: cache de KV em q8_0 + flash attention, sem a qual o
+    # qwen3.5:9b nao cabe inteiro nos 8 GB da placa). Fica nas variaveis do usuario do Windows.
+    if ($serverEnv) {
+        $changed = $false
+
+        foreach ($property in $serverEnv.PSObject.Properties) {
+            $current = [Environment]::GetEnvironmentVariable($property.Name, "User")
+
+            if ($current -ne [string]$property.Value) {
+                if ($DryRun) {
+                    Say "  (simulacao) $($property.Name)=$($property.Value)" "Yellow"
+                } else {
+                    [Environment]::SetEnvironmentVariable($property.Name, [string]$property.Value, "User")
+                    Say "  Configurado para o Ollama: $($property.Name)=$($property.Value)" "Green"
+                }
+                $changed = $true
+            }
+
+            Set-Item -Path "Env:$($property.Name)" -Value ([string]$property.Value)
+        }
+
+        if ($changed -and -not $DryRun) {
+            # O Ollama so le essas variaveis ao iniciar: reinicia o que estiver aberto.
+            $running = Get-Process -Name "ollama", "ollama app" -ErrorAction SilentlyContinue
+            if ($running) {
+                Say "  Reiniciando o Ollama para valer a nova configuracao..."
+                $running | Stop-Process -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 3
+                $trayApp = Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama app.exe"
+                if (Test-Path $trayApp) {
+                    Start-Process -FilePath $trayApp
+                } else {
+                    Start-Process -FilePath "ollama" -ArgumentList "serve" -WindowStyle Hidden
+                }
+                Start-Sleep -Seconds 5
+            }
+        }
     }
 
     if ($SkipModel) {
@@ -236,7 +280,7 @@ try {
 
         if ($installed -match [regex]::Escape($model)) {
             Say "  O modelo $model ja esta baixado." "Green"
-        } elseif (Ask-YesNo "  Baixar o modelo $model agora? (cerca de 5 GB, precisa de internet)") {
+        } elseif (Ask-YesNo "  Baixar o modelo $model agora? (cerca de 7 GB, precisa de internet)") {
             & ollama pull $model
             if ($LASTEXITCODE -ne 0) {
                 Warn "O download do modelo falhou. Rode de novo mais tarde com:  ollama pull $model"

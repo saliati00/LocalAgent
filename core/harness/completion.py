@@ -70,17 +70,21 @@ def build_continuation_reason(
     base_reason: str | None = None,
     registry_path: Path | str | None = None,
     registry_data: dict | None = None,
+    include_guidance: bool = True,
 ) -> str:
     """
     Constrói a mensagem de motivo para CONTINUE combinando o status do projeto
     com a orientação operacional determinística caso aplicável.
+
+    include_guidance=False: tarefa que não é o desenvolvimento do projeto. A orientação
+    de fase (ex.: escolher o SMART) desviaria o modelo do que o usuário pediu.
     """
     guidance = get_continuation_guidance(
         current_phase=current_phase,
         next_action=next_action,
         registry_path=registry_path,
         registry_data=registry_data,
-    )
+    ) if include_guidance else None
 
     if not base_reason:
         phase_str = f" na {current_phase}" if current_phase else ""
@@ -110,6 +114,7 @@ def check_completion(
     next_action: str | None = None,
     registry_path: Path | str | None = None,
     registry_data: dict | None = None,
+    include_guidance: bool = True,
 ) -> dict:
     """
     Avalia se a resposta atual representa a conclusão da tarefa.
@@ -133,6 +138,7 @@ def check_completion(
             base_reason=base_msg,
             registry_path=registry_path,
             registry_data=registry_data,
+            include_guidance=include_guidance,
         )
         return {
             "status": "continue",
@@ -149,6 +155,7 @@ def check_completion(
             base_reason=base_msg,
             registry_path=registry_path,
             registry_data=registry_data,
+            include_guidance=include_guidance,
         )
         return {
             "status": "continue",
@@ -245,6 +252,7 @@ Responda SOMENTE com JSON válido:
                     base_reason=base_msg,
                     registry_path=registry_path,
                     registry_data=registry_data,
+                    include_guidance=include_guidance,
                 ),
             }
 
@@ -259,6 +267,7 @@ Responda SOMENTE com JSON válido:
                 base_reason=reason,
                 registry_path=registry_path,
                 registry_data=registry_data,
+                include_guidance=include_guidance,
             )
 
         return {
@@ -276,5 +285,6 @@ Responda SOMENTE com JSON válido:
                 base_reason=base_msg,
                 registry_path=registry_path,
                 registry_data=registry_data,
+                include_guidance=include_guidance,
             ),
         }
