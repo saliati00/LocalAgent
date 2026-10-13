@@ -1254,6 +1254,16 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [x] Criar escalada automática
 * [x] Evoluir Harness conforme necessidades reais das tarefas
 
+**Ferramentas de uso geral (autoconstrução).** Etapa para o próprio agente construir. Motivo: com as ferramentas de hoje ele não consegue organizar uma pasta (não há mover, copiar nem apagar; `move` e `del` não rodam sem shell; a escrita só vale dentro do projeto) e, quando falta ferramenta, improvisa com comandos e erra mais. Como `tools/manager.py` é protegido, o agente escreve as ferramentas e os testes num módulo novo e o registro no manager é feito pelo usuário, depois de revisar.
+
+* [ ] Ferramentas de arquivos: mover/renomear, copiar, criar pasta, apagar para a Lixeira e listar com tamanho, data e tipo (sem sobrescrever, sem tocar em caminhos protegidos, com registro para o `restaurar.py` desfazer)
+* [ ] Plano antes de mexer em vários arquivos: o agente mostra a lista de movimentos e pede uma confirmação só
+* [ ] Leitura de PDF, Word e Excel
+* [ ] Compactar e descompactar (zip)
+* [ ] Casos de uso geral na bateria: organizar pasta bagunçada, achar o maior arquivo, resumir um PDF
+* [ ] [humano] Revisar e registrar em `tools/manager.py` as ferramentas que o agente construir
+* [ ] [humano] Definir as pastas fora do projeto que o agente pode organizar (hoje ele só escreve dentro do projeto)
+
 ---
 
 ## FASE 5 — CONTEXTO E MEMÓRIA
