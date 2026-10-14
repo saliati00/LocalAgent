@@ -464,3 +464,10 @@ Rodada `logs/comparacao/20261013_220629` (commit c64f64a, Ollama 0.40.3, ~1 h 30
 * **Instalação:** o passo 8 do instalador (Open WebUI) saiu; nada novo para baixar. `.venv-webui` e `data-webui` deixaram de existir.
 * **Verificação:** testes automáticos e uma conversa real no navegador (com um agente de mentira): progresso, bloco de código, confirmação por botão e mensagem seguinte com contexto. Falta testar com o 9b de verdade em casa.* **Endereço (14/10/2026):** o chat abre em `http://agent.localhost:8765` (também `http://127.0.0.1:8765`). Nomes `*.localhost` apontam para o próprio PC nos navegadores, sem mexer no arquivo `hosts` e sem administrador (o `agent.local` exigiria editar o `hosts` e usa o sufixo reservado do mDNS). Conferido no navegador. A ponte só aceita pedidos cujo `Host` e `Origin` sejam `agent.localhost`, `localhost` ou `127.0.0.1`: uma página de outro site não consegue mandar tarefas ao agente pelo navegador do usuário (403).
 
+# 66. RODADA CURTA DO SMART (preparada em 14/10/2026)
+
+* `comparar-smart.bat`: roda só os 4 perfis SMART (`--perfis smart --sim`), de 1,5 a 2,5 horas, sem downloads. Ordem: `s-gptoss20`, `par-9b+gptoss20`, `s-gemma12`, `par-9b+gemma12` (os mais pesados em RAM primeiro).
+* **Experimento:** os perfis SMART usam `OLLAMA_GPU_OVERHEAD=536870912` (512 MiB de folga de VRAM) além do cache q8_0, para tentar eliminar a queda de carregamento da rodada 4. É hipótese, não causa confirmada; o relatório conta as quedas absorvidas (`MODEL_LOAD_RETRY`, `MALFORMED_TOOL_CALL`, `FAST_RETRY` e `ESCALATION_SKIPPED` entraram nos eventos do relatório).
+* Cada perfil com servidor próprio agora começa descarregando tudo do Ollama normal (um modelo esquecido ali com keep-alive de 5 min ocupa VRAM e RAM).
+* Critério de leitura: o SMART só serve se passar onde o FAST falha (tarefas reais e tarefa 3) sem as quedas de carregamento contaminando; o par 9b + gemma já passou a tarefa 3 uma vez (16 casos).
+

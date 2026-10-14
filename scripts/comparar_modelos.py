@@ -60,8 +60,13 @@ FAST_PROFILES = ["9b-kv8", "9b-16k-kv8"]
 
 # Candidatos a SMART. Rodam só os grupos difíceis (raciocínio, tarefas reais, tarefas numeradas), uma rodada
 # cada, com mais tempo por caso e por chamada (parte do modelo fica na CPU). O que importa é acertar, não a velocidade.
+# Rodada 4 (13/10/2026): o llama-server caía ao carregar ("CUDA error: shared object initialization failed") com 6,9 GiB
+# livres. Experimento: reservar 512 MiB de VRAM de folga (OLLAMA_GPU_OVERHEAD, em bytes) só nos perfis SMART. O relatório
+# mostra quantas quedas sobraram (evento MODEL_LOAD_RETRY).
+SMART_SERVER = {**KV8, "OLLAMA_GPU_OVERHEAD": str(512 * 1024 * 1024)}
+
 SMART_BASE = {
-    "num_ctx": 8192, "server": KV8, "role": "smart", "grupos": "raciocinio,real,tarefas", "repeticoes": 1,
+    "num_ctx": 8192, "server": SMART_SERVER, "role": "smart", "grupos": "raciocinio,real,tarefas", "repeticoes": 1,
     "timeout_factor": 3, "call_timeout": 600, "limite": 10800,
 }
 PROFILES.update({
@@ -73,7 +78,8 @@ PROFILES.update({
     "s-coder30": {"model": "qwen3-coder:30b", **SMART_BASE},
 })
 # Fora do padrão: s-coder30 (a estimativa diz que não cabe em 16 GB de RAM; risco de travar). Disponível por nome.
-SMART_PROFILES = ["s-gemma12", "s-gptoss20", "par-9b+gemma12", "par-9b+gptoss20"]
+# Os dois gpt-oss primeiro: são os que mais pedem RAM e foram interrompidos na rodada 4, com a máquina menos "usada".
+SMART_PROFILES = ["s-gptoss20", "par-9b+gptoss20", "s-gemma12", "par-9b+gemma12"]
 DEFAULT_PROFILES = FAST_PROFILES + SMART_PROFILES
 PROFILE_GROUPS = {"fast": FAST_PROFILES, "smart": SMART_PROFILES, "tudo": DEFAULT_PROFILES}
 
@@ -1173,6 +1179,10 @@ def run_model(profile: dict, root: Path, args, entries: list[dict], resume: bool
     if not profile.get("server") and not ensure():
         entries.append({"label": label, "results": [], "meta": {}, "profile": profile, "skipped": "Ollama indisponível"})
         return
+
+    if profile.get("server"):
+        # Um modelo esquecido no Ollama normal (keep-alive de 5 min) ocupa VRAM e RAM que o servidor do perfil precisa.
+        free_gpu()
 
     try:
         for attempt in range(1, SMOKE_ATTEMPTS + 1):

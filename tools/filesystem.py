@@ -60,6 +60,7 @@ PROTECTED_PATHS = [
     (PROJECT_ROOT / "FAZER-EM-CASA.txt").resolve(),
     (PROJECT_ROOT / "comparar.bat").resolve(),
     (PROJECT_ROOT / "comparar-tudo-confirmado.bat").resolve(),
+    (PROJECT_ROOT / "comparar-smart.bat").resolve(),
     (PROJECT_ROOT / "iniciar-fast.bat").resolve(),
     (PROJECT_ROOT / "iniciar-web.bat").resolve(),
     (PROJECT_ROOT / "scripts" / "ponte_web.py").resolve(),

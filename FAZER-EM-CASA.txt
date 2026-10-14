@@ -1,68 +1,46 @@
-LOCALAGENT - O QUE FAZER EM CASA (rodada 4: decidir o SMART)
-==========================================================
+LOCALAGENT - O QUE FAZER EM CASA (rodada 5: so o SMART, curta)
+==============================================================
 
-A rodada anterior (09/10) decidiu o FAST: qwen3.5:9b com cache de KV em q8_0 (89%, 63 tokens/s,
-100% na placa). Esta rodada confirma o FAST com as correcoes do Harness e decide o SMART.
+O FAST esta decidido (qwen3.5:9b com cache q8_0). Falta decidir o SMART. A rodada anterior foi
+estragada por uma queda do programa que carrega o modelo (erro de CUDA) e pelo gpt-oss ter sido
+interrompido por falta de RAM. Agora o agente repete a chamada quando o modelo cai ao carregar, e esta
+rodada mede so o que falta.
 
 REGRA DE OURO: voce NAO precisa anotar nem copiar nada. Tudo o que eu preciso fica na pasta  logs.
-No fim, compacte a pasta  logs  inteira (botao direito > Enviar para > Pasta compactada) e me mande.
+No fim, compacte a pasta  logs  inteira e me mande.
 
 
-O QUE ELA MEDE
-- 6 perfis, nesta ordem. Primeiro o FAST escolhido:
-    9b-kv8           qwen3.5:9b com cache de KV quantizado (o FAST adotado; mede o efeito das correcoes)
-    9b-16k-kv8       o mesmo com contexto de 16 mil tokens (mais memoria de conversa)
-  Depois os candidatos a SMART (o modelo maior, que assume quando o FAST trava),
-  so nos casos dificeis (raciocinio, tarefas reais, tarefas numeradas):
-    s-gemma12        gemma4:12b (nao rodou da ultima vez por um erro passageiro da placa)
-    s-gptoss20       gpt-oss:20b (rodou, mas o Harness atrapalhou; ja foi corrigido)
-    par-9b+gemma12   o 9b como FAST que ENTREGA ao gemma4:12b quando trava
+O QUE ELA MEDE (4 perfis, so os casos dificeis: raciocinio, tarefas reais e tarefas numeradas)
+    s-gptoss20       gpt-oss:20b sozinho
     par-9b+gptoss20  o 9b como FAST que ENTREGA ao gpt-oss:20b quando trava
-- Duracao: cerca de 3 a 4 horas (a rodada anterior, com 8 perfis, levou 3 h 10 min).
-- Downloads: nenhum. Todos os modelos ja estao no seu PC.
-- Durante a rodada ele anota o consumo da maquina (VRAM, GPU, RAM, temperatura) a cada 5 s.
+    s-gemma12        gemma4:12b sozinho
+    par-9b+gemma12   o 9b como FAST que ENTREGA ao gemma4:12b quando trava
+- Os dois gpt-oss rodam primeiro de proposito: sao os que mais usam RAM.
+- Experimento novo: esses perfis reservam 512 MB de VRAM de folga (OLLAMA_GPU_OVERHEAD) para ver se a
+  queda de carregamento some. O relatorio mostra quantas quedas sobraram (MODEL_LOAD_RETRY).
+- Duracao: de 1,5 a 2,5 horas. Downloads: nenhum.
 
 
 ANTES DE COMECAR
-[ ] 1. Apagar a pasta LocalAgent e clonar de novo (como voce ja faz):
-        git clone https://github.com/saliati00/LocalAgent.git
+[ ] 1. Apagar a pasta LocalAgent e clonar de novo:  git clone https://github.com/saliati00/LocalAgent.git
+[ ] 2. Duplo clique em  instalar.bat   (agora nao baixa mais nada alem do que ja tinha)
+[ ] 3. FECHAR tudo que for pesado: navegador, jogos, Teams, o proprio chat do LocalAgent. O gpt-oss
+       usa quase toda a RAM; se a memoria livre cair abaixo de 700 MB o programa interrompe o perfil.
+[ ] 4. Duplo clique em  comparar-smart.bat   (nao pergunta nada). Depois e so deixar rodando.
 
-[ ] 2. Dar duplo clique em  instalar.bat
-    NOVIDADE: ele grava no Windows duas configuracoes do Ollama que o FAST precisa
-    (OLLAMA_FLASH_ATTENTION=1 e OLLAMA_KV_CACHE_TYPE=q8_0) e reinicia o Ollama sozinho.
-    Se aparecer o icone do Ollama reabrindo perto do relogio, e isso. Nao precisa fazer nada.
-
-[ ] 3. Fechar tudo que for pesado (jogos, navegador com muitas abas) e dar duplo clique em:
-        comparar-tudo-confirmado.bat     (roda tudo sem perguntar nada)
-    Depois e so deixar rodando. Nao digita nada.
+Se o PC travar ou a rodada parar no meio: reinicie e de duplo clique de novo em  comparar-smart.bat.
+Ele continua de onde parou, repete o caso que estava rodando e pula um caso que travar duas vezes.
+(Para a rodada completa de todos os perfis: comparar-tudo-confirmado.bat.)
 
 
 CUIDADOS ENQUANTO RODA
-- Nao usar o PC para outra coisa pesada.
-- O proprio programa impede o Windows de suspender o PC. Mesmo assim, se puder, desative a suspensao.
-- Nao fechar a janela do comparar nem reiniciar o Ollama.
-- Os perfis usam um segundo servidor do Ollama (porta 11435) que o programa sobe e desce sozinho.
-- Se um modelo nao carregar, o programa libera a placa e tenta mais uma vez sozinho.
+- Nao usar o PC para outra coisa pesada. O programa impede o Windows de suspender.
+- Nao fechar a janela nem reiniciar o Ollama.
+- Se um modelo nao carregar, o programa libera a placa e tenta de novo sozinho (ate 3 vezes por caso).
 - Se algum caso falhar ou algum perfil for pulado: NAO mexer. O relatorio ja registra o motivo.
 
 
-SE O PC TRAVAR (tela congelada, tudo lento demais, precisou segurar o botao de ligar)
-- Reinicie o PC normalmente. Nao precisa apagar nada.
-- Abra a pasta LocalAgent e de duplo clique DE NOVO em comparar-tudo-confirmado.bat.
-  Ele percebe sozinho que a rodada anterior nao terminou e CONTINUA de onde parou.
-  (Para ignorar a rodada antiga e comecar do zero: comparar.bat --nova)
-- O que o programa faz sozinho ao retomar:
-    * aproveita tudo que ja tinha rodado (cada caso e gravado no disco assim que termina);
-    * REPETE o caso que estava rodando quando o PC travou (uma segunda chance);
-    * se esse MESMO caso travar o PC de novo, ele e PULADO e a bateria segue;
-    * DESFAZ qualquer arquivo do projeto que o agente tivesse alterado antes de travar;
-    * se o MESMO perfil acumular 3 travamentos, o perfil inteiro e ABANDONADO; os outros seguem.
-- Durante a rodada ele tambem vigia a memoria: se a RAM livre cair abaixo de 700 MB por uns
-  20 segundos, ele encerra aquele perfil ANTES de o PC travar e anota o motivo.
-  (O par-9b+gptoss20 e o perfil mais pesado: dois modelos que juntos nao cabem na placa.)
-
-
-NOVIDADE: USAR O AGENTE SO COM O FAST (opcional, nao e parte da rodada)
+NOVIDADE: USAR O AGENTE SO COM O FAST (opcional; fazer DEPOIS da rodada, nunca durante)
 - instalar.bat NAO baixa mais nada para isso (o Open WebUI foi trocado por uma pagina de chat propria).
 - iniciar-fast.bat   o agente no terminal, so com o FAST (nunca chama o SMART).
 - iniciar-web.bat    abre o chat no navegador em  http://agent.localhost:8765  (tambem funciona

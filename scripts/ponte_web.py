@@ -295,6 +295,11 @@ def make_handler(session: Session, resolve_prompt):
             if request_allowed(self.headers.get("Host", ""), self.headers.get("Origin", "")):
                 return False
 
+            try:  # lê e descarta o corpo, senão o navegador recebe a conexão cortada em vez do 403
+                self.rfile.read(min(int(self.headers.get("Content-Length") or 0), 1_000_000))
+            except (ValueError, OSError):
+                pass
+
             self._json({"error": {"message": f"acesso permitido só por {SITE_NAME}, localhost ou 127.0.0.1"}}, 403)
             return True
 

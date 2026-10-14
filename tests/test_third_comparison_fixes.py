@@ -224,7 +224,7 @@ def test_a_model_that_fails_to_load_once_is_retried_and_its_first_log_is_kept(tm
 
     cmp.run_model(profile, tmp_path, args(), entries, False, lambda: True)
 
-    assert ran == ["free", "bateria"]
+    assert ran == ["free", "free", "bateria"], "libera a placa antes de começar e de novo depois da queda"
     assert "skipped" not in entries[0]
     assert (tmp_path / "s-gemma12" / "servidor-ollama-falha-1.log").read_text(encoding="utf-8") == "CUDA error"
 
@@ -368,3 +368,46 @@ def test_the_battery_counts_a_load_crash_as_infrastructure_and_repeats_the_case(
 
     assert result["passed"] and waited == [bateria.CRASH_RETRY_WAIT_SECONDS]
     assert bateria.LLAMA_CRASH.search(CRASH) and not bateria.LLAMA_CRASH.search("tudo certo")
+
+
+# ---------------------------------------------------------
+# Rodada curta do SMART
+# ---------------------------------------------------------
+
+def test_the_short_smart_round_runs_only_the_smart_profiles_without_asking():
+    bat = (PROJECT_ROOT / "comparar-smart.bat").read_text(encoding="utf-8")
+
+    assert "--perfis smart" in bat and "--sim" in bat and "comparar.bat" in bat
+
+
+def test_smart_profiles_run_the_ram_hungry_gpt_oss_first_and_leave_vram_headroom():
+    assert cmp.SMART_PROFILES[:2] == ["s-gptoss20", "par-9b+gptoss20"]
+    assert cmp.SMART_SERVER["OLLAMA_GPU_OVERHEAD"] == str(512 * 1024 * 1024)
+    assert all(cmp.PROFILES[name]["server"] == cmp.SMART_SERVER for name in cmp.SMART_PROFILES)
+    assert cmp.PROFILES["9b-kv8"]["server"] == cmp.KV8, "o perfil FAST não muda"
+
+
+def test_the_gpu_is_freed_before_a_profile_with_its_own_server_starts(tmp_path, monkeypatch):
+    order = []
+
+    @contextlib.contextmanager
+    def fake_server(profile, folder):
+        order.append("servidor")
+        yield "http://127.0.0.1:11435"
+
+    monkeypatch.setattr(cmp, "model_installed", lambda m: True)
+    monkeypatch.setattr(cmp, "free_gpu", lambda: order.append("free"))
+    monkeypatch.setattr(cmp, "server_for", fake_server)
+    monkeypatch.setattr(cmp, "smoke_test", lambda *a, **k: {"ok": True, "tool_call": True, "seconds": 1, "error": ""})
+    monkeypatch.setattr(cmp, "run_one", lambda *a, **k: order.append("bateria"))
+    monkeypatch.setattr(cmp, "collect", lambda folder, label: None)
+
+    cmp.run_model({"label": "x", "model": "m", "num_ctx": 8192, "server": cmp.KV8}, tmp_path, args(), [], False, lambda: True)
+
+    assert order[:2] == ["free", "servidor"]
+
+
+def test_the_report_counts_the_load_crashes_that_were_absorbed():
+    import summarize_logs
+
+    assert "MODEL_LOAD_RETRY" in summarize_logs.EVENTS_OF_INTEREST

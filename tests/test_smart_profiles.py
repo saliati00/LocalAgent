@@ -44,7 +44,7 @@ def test_smart_profiles_run_only_the_hard_groups_once_with_extra_time():
 
         assert profile["role"] == "smart" and profile["grupos"] == "raciocinio,real,tarefas" and profile["repeticoes"] == 1
         assert profile["timeout_factor"] > 1 and profile["call_timeout"] > 120 and profile["limite"] > 6000
-        assert profile["server"] == cmp.KV8
+        assert profile["server"] == cmp.SMART_SERVER and profile["server"]["OLLAMA_KV_CACHE_TYPE"] == "q8_0"
 
 
 def test_the_paired_profile_is_a_fast_model_that_escalates_to_a_smart_one():
