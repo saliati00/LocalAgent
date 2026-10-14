@@ -78,12 +78,16 @@ def timeout_factor() -> float:
 
 DEFAULT_OLLAMA_URL = "http://localhost:11434"
 OLLAMA_WAIT_SECONDS = 90
-MAX_INFRA_RETRIES = 2
+MAX_INFRA_RETRIES = 3
+CRASH_RETRY_WAIT_SECONDS = 20
 # Sinais de que o servidor do Ollama caiu no meio do caso (falha de infraestrutura, não do modelo).
 INFRA_PATTERNS = re.compile(
     r"Connection refused|ConnectError|Failed to connect|actively refused|10061|ConnectionError|RemoteProtocolError|Server disconnected",
     re.IGNORECASE,
 )
+# O servidor ficou de pé, mas o programa que carrega o modelo caiu (erro de CUDA ao carregar): também é
+# infraestrutura, e repetir o caso depois de alguns segundos costuma resolver.
+LLAMA_CRASH = re.compile(r"llama-server process has terminated|CUDA error|0xc0000409|shared object initialization failed", re.IGNORECASE)
 SLOW_TIMEOUT = 1500
 TOKENS_LINE = re.compile(r"TOKENS \| input=(\d+) \| output=(\d+)")
 NO_ANSWER = re.compile(
@@ -639,10 +643,15 @@ def run_in_child_once(case_def: dict, attempt: int, folder: Path) -> dict:
             if not result.get("passed") and INFRA_PATTERNS.search(output):
                 result["infra"] = True
 
+            if not result.get("passed") and LLAMA_CRASH.search(output):
+                result["infra"] = True
+                result["crash"] = True
+
             return result
 
     result = failure_result(case_def, "o caso não devolveu resultado (ver a transcrição)", "sem-resultado", time.time() - started)
-    result["infra"] = bool(INFRA_PATTERNS.search(output))
+    result["infra"] = bool(INFRA_PATTERNS.search(output) or LLAMA_CRASH.search(output))
+    result["crash"] = bool(LLAMA_CRASH.search(output))
 
     return result
 
@@ -666,6 +675,9 @@ def run_in_child(case_def: dict, attempt: int, folder: Path, runner=None, ensure
 
         if result.get("passed") or not result.get("infra"):
             break
+
+        if result.get("crash") and retry < retries:
+            time.sleep(CRASH_RETRY_WAIT_SECONDS)
 
     if result.get("infra") and not result.get("passed"):
         result["detail"] = "FALHA DE INFRA (não conta contra o modelo): " + result["detail"]

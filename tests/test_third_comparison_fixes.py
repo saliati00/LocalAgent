@@ -297,3 +297,74 @@ def test_the_evaluation_table_uses_the_profile_name_even_when_meta_only_has_the_
 
     assert "| FAST sozinho | 9b-kv8 |" in text and "| FAST com think | 9b-think |" in text
     assert "| SMART sozinho | s-gptoss20 |" in text and "| Cascata (FAST + SMART) | par-9b+gemma12 |" in text
+
+
+# ---------------------------------------------------------
+# Quarta rodada (13/10/2026): o llama-server caía ao carregar o modelo
+# ---------------------------------------------------------
+
+CRASH = "llama-server process has terminated: exit status 0xc0000409: ... CUDA error: shared object initialization failed (status code: 500)"
+
+
+def test_model_load_failures_are_recognised():
+    assert agent.is_model_load_failure(RuntimeError(CRASH))
+    assert not agent.is_model_load_failure(RuntimeError("connection refused"))
+    assert not agent.is_model_load_failure(RuntimeError("error parsing tool call: raw='{}'"))
+
+
+def test_a_model_that_fails_to_load_is_asked_again_before_the_task_dies(tmp_path, monkeypatch):
+    answers = iter([RuntimeError(CRASH), RuntimeError(CRASH), SimpleNamespace(
+        message=SimpleNamespace(role="assistant", content="Feito.", tool_calls=None), prompt_eval_count=1, eval_count=1)])
+
+    def fake_chat(*args, **kwargs):
+        value = next(answers)
+
+        if isinstance(value, Exception):
+            raise value
+
+        return value
+
+    monkeypatch.setattr(agent.client, "chat", fake_chat)
+    monkeypatch.setattr(agent, "TASKS_DIR", tmp_path / "tasks")
+    monkeypatch.setattr(agent.time, "sleep", lambda s: None)
+    monkeypatch.setattr(agent, "check_completion", lambda **k: {"status": "complete", "reason": "ok"})
+    events = capture_log(monkeypatch)
+
+    result = agent.agent("Diga oi")
+
+    assert [e for e, _ in events].count("MODEL_LOAD_RETRY") == 2
+    assert result == {"status": "completed", "response": "Feito."}
+
+
+def test_a_model_that_never_loads_stops_after_the_retries(tmp_path, monkeypatch):
+    calls = {"n": 0}
+
+    def fake_chat(*args, **kwargs):
+        calls["n"] += 1
+        raise RuntimeError(CRASH)
+
+    monkeypatch.setattr(agent.client, "chat", fake_chat)
+    monkeypatch.setattr(agent, "TASKS_DIR", tmp_path / "tasks")
+    monkeypatch.setattr(agent.time, "sleep", lambda s: None)
+    events = capture_log(monkeypatch)
+
+    result = agent.agent("Diga oi")
+
+    assert calls["n"] == agent.MAX_MODEL_LOAD_RETRIES + 1 and result["status"] == "failed"
+    assert any(e == "STOP" for e, _ in events)
+
+
+def test_the_battery_counts_a_load_crash_as_infrastructure_and_repeats_the_case(monkeypatch):
+    import bateria
+
+    outputs = iter([
+        {"id": "x", "passed": False, "detail": "não foi criado", "status": "failed", "infra": True, "crash": True},
+        {"id": "x", "passed": True, "detail": "ok", "status": "completed", "infra": False},
+    ])
+    waited = []
+    monkeypatch.setattr(bateria.time, "sleep", lambda s: waited.append(s))
+
+    result = bateria.run_in_child({"id": "x"}, 1, Path("."), runner=lambda c, a, f: next(outputs), ensure=lambda: True)
+
+    assert result["passed"] and waited == [bateria.CRASH_RETRY_WAIT_SECONDS]
+    assert bateria.LLAMA_CRASH.search(CRASH) and not bateria.LLAMA_CRASH.search("tudo certo")

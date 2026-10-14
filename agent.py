@@ -807,6 +807,17 @@ def answer_skipped_tool_calls(messages: list, skipped_calls, reason: str) -> Non
 
 MAX_MALFORMED_TOOL_CALLS = 2
 
+# O llama-server do Ollama às vezes cai ao CARREGAR o modelo ("CUDA error: shared object initialization failed",
+# saída 0xc0000409). Na rodada de 13/10/2026 isso derrubou 28 de 59 casos do 9b-kv8; a mesma chamada, repetida
+# alguns segundos depois, costuma funcionar.
+MAX_MODEL_LOAD_RETRIES = 3
+MODEL_LOAD_RETRY_SECONDS = 8
+
+
+def is_model_load_failure(error: Exception) -> bool:
+    text = str(error)
+    return "llama-server process has terminated" in text or "CUDA error" in text or "0xc0000409" in text
+
 MALFORMED_TOOL_CALL_HINT = (
     "Sua última chamada de ferramenta veio com erro de sintaxe e não foi executada. "
     "Os argumentos precisam ser valores literais em JSON (texto entre aspas, sem '+', sem código "
@@ -1094,6 +1105,7 @@ REGRAS:
     fast_retry_used = False
     final_response = ""
     malformed_tool_calls = 0
+    model_load_retries = 0
 
     task_number = task_number_from_prompt(prompt)
     acceptance_args = acceptance_command(task_number) if task_number else None
@@ -1309,6 +1321,7 @@ REGRAS:
             )
 
             call_seconds = time.monotonic() - call_started
+            model_load_retries = 0
             speed = tokens_per_second(
                 response.eval_count or 0,
                 getattr(response, "eval_duration", None),
@@ -1335,6 +1348,12 @@ REGRAS:
                 context_mgr.request_compaction()
 
         except Exception as e:
+            if is_model_load_failure(e) and model_load_retries < MAX_MODEL_LOAD_RETRIES:
+                model_load_retries += 1
+                log("MODEL_LOAD_RETRY", f"{model_load_retries}/{MAX_MODEL_LOAD_RETRIES} | {str(e)[:200]}")
+                time.sleep(MODEL_LOAD_RETRY_SECONDS)
+                continue
+
             if is_malformed_tool_call(e) and malformed_tool_calls < MAX_MALFORMED_TOOL_CALLS:
                 # O modelo escreveu a chamada de ferramenta com erro de sintaxe e o Ollama a rejeitou.
                 # A tarefa não está perdida: explica e deixa o modelo tentar de novo.
