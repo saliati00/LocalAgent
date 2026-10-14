@@ -65,7 +65,8 @@ SE O PC TRAVAR (tela congelada, tudo lento demais, precisou segurar o botao de l
 NOVIDADE: USAR O AGENTE SO COM O FAST (opcional, nao e parte da rodada)
 - instalar.bat NAO baixa mais nada para isso (o Open WebUI foi trocado por uma pagina de chat propria).
 - iniciar-fast.bat   o agente no terminal, so com o FAST (nunca chama o SMART).
-- iniciar-web.bat    abre o chat no navegador (http://127.0.0.1:8765), tambem so com o FAST.
+- iniciar-web.bat    abre o chat no navegador em  http://agent.localhost:8765  (tambem funciona
+                      http://127.0.0.1:8765), tambem so com o FAST.
     * Escreva a tarefa e aperte Enter. O progresso (ferramentas usadas) aparece como citacao e depois a resposta.
     * Quando o agente precisar de confirmacao (rodar comando, etc.) aparecem os botoes  Sim  e  Nao.
     * Uma tarefa por vez. O agente recebe um resumo das ultimas trocas como contexto.

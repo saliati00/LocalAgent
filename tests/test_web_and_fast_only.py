@@ -3,6 +3,7 @@
 import json
 import sys
 import threading
+import urllib.error
 import urllib.request
 from pathlib import Path
 from types import SimpleNamespace
@@ -350,3 +351,44 @@ def test_the_new_launchers_and_bridge_are_protected_from_the_agent(relative):
 
     assert any(p == target or p in target.parents for p in PROTECTED_PATHS)
     assert write_file(str(target), "x")["success"] is False
+
+
+# ---------------------------------------------------------
+# Endereço agent.localhost e proteção contra outros sites
+# ---------------------------------------------------------
+
+def test_the_chat_opens_at_agent_localhost():
+    assert ponte_web.SITE_NAME == "agent.localhost"
+    assert 'ponte_web.SITE_NAME' in (PROJECT_ROOT / "scripts" / "iniciar_web.py").read_text(encoding="utf-8")
+    assert "agent.localhost" in (PROJECT_ROOT / "FAZER-EM-CASA.txt").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("host, origin, expected", [
+    ("agent.localhost:8765", "", True),
+    ("127.0.0.1:8765", "", True),
+    ("localhost:8765", "http://agent.localhost:8765", True),
+    ("evil.example.com", "", False),
+    ("agent.localhost.evil.com:8765", "", False),
+    ("agent.localhost:8765", "https://evil.example.com", False),
+    ("127.0.0.1:8765", "null", False),
+])
+def test_only_the_pcs_own_names_are_accepted(host, origin, expected):
+    assert ponte_web.request_allowed(host, origin) is expected
+
+
+def test_a_request_with_a_foreign_host_or_origin_is_refused_by_the_server(bridge):
+    def call(headers, path="/v1/models", data=None):
+        request = urllib.request.Request(bridge.base + path, data=data, headers=headers)
+
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return response.status
+        except urllib.error.HTTPError as error:
+            return error.code
+
+    body = json.dumps({"messages": [{"role": "user", "content": "x"}]}).encode("utf-8")
+
+    assert call({"Host": "agent.localhost:1"}) == 200
+    assert call({"Host": "evil.example.com"}) == 403
+    assert call({"Origin": "https://evil.example.com", "Content-Type": "text/plain"}, "/v1/chat/completions", body) == 403
+    assert bridge.calls == [], "um site de fora não pode iniciar uma tarefa"

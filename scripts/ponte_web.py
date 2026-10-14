@@ -37,6 +37,8 @@ YES = ("sim", "s", "ok", "yes", "y", "pode", "confirmo", "executar")
 LOG_LINE = re.compile(r"^\[\d{4}-\d\d-\d\d [\d:]+\] \[[0-9a-f]+\] (\w+)(?: \| (.*))?$")
 
 PAGE = ROOT / "web" / "index.html"
+SITE_NAME = "agent.localhost"  # os navegadores resolvem *.localhost para o próprio PC, sem mexer no arquivo hosts
+ALLOWED_HOSTS = ("127.0.0.1", "localhost", SITE_NAME)
 HISTORY_PAIRS = 3
 HISTORY_CHARS = 300
 
@@ -214,6 +216,31 @@ def last_user_text(messages: list) -> str:
     return ""
 
 
+def host_of(value: str) -> str:
+    """'agent.localhost:8765' ou 'http://agent.localhost:8765' -> 'agent.localhost'."""
+
+    value = (value or "").strip().lower()
+
+    if "://" in value:
+        value = value.split("://", 1)[1]
+
+    value = value.split("/", 1)[0]
+
+    return value.rsplit(":", 1)[0] if ":" in value else value
+
+
+def request_allowed(host_header: str, origin_header: str) -> bool:
+    """
+    Só aceita pedidos feitos pelos nomes do próprio PC. Barra páginas de outros sites que tentem falar com o agente
+    pelo seu navegador (pelo nome do site, no cabeçalho Host, ou pela origem, no cabeçalho Origin).
+    """
+
+    if host_of(host_header) not in ALLOWED_HOSTS:
+        return False
+
+    return not origin_header or host_of(origin_header) in ALLOWED_HOSTS
+
+
 def history_context(messages: list) -> str:
     """Resumo curto das últimas trocas (pedido e resposta final), sem o progresso das ferramentas e sem as confirmações."""
 
@@ -264,7 +291,17 @@ def make_handler(session: Session, resolve_prompt):
             self.end_headers()
             self.wfile.write(body)
 
+        def _forbidden(self) -> bool:
+            if request_allowed(self.headers.get("Host", ""), self.headers.get("Origin", "")):
+                return False
+
+            self._json({"error": {"message": f"acesso permitido só por {SITE_NAME}, localhost ou 127.0.0.1"}}, 403)
+            return True
+
         def do_GET(self):
+            if self._forbidden():
+                return
+
             if self.path in ("/", "/index.html"):
                 try:
                     body = PAGE.read_bytes()
@@ -285,6 +322,9 @@ def make_handler(session: Session, resolve_prompt):
                 self._json({"error": {"message": "não encontrado"}}, 404)
 
         def do_POST(self):
+            if self._forbidden():
+                return
+
             if self.path.rstrip("/") not in ("/v1/chat/completions", "/chat/completions"):
                 self._json({"error": {"message": "não encontrado"}}, 404)
                 return
