@@ -1,6 +1,4 @@
 .venv/
-.venv-webui/
-data-webui/
 __pycache__/
 *.pyc
 .pytest_cache/

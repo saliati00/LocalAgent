@@ -456,3 +456,11 @@ Rodada `logs/comparacao/20261013_220629` (commit c64f64a, Ollama 0.40.3, ~1 h 30
 * **Correções:** `agent.py` repete a chamada ao modelo até 3 vezes (8 s de intervalo) quando o llama-server cai ao carregar (`MODEL_LOAD_RETRY`); na bateria, essa queda passa a ser falha de infraestrutura (não conta contra o modelo) e o caso é repetido até 3 vezes, com 20 s de espera.
 * **Pendente:** a causa da queda (candidato a testar: `OLLAMA_GPU_OVERHEAD` para deixar folga de VRAM); o gpt-oss e o gemma sozinhos continuam sem medição válida.
 
+# 65. OPEN WEBUI SUBSTITUÍDO POR UMA PÁGINA PRÓPRIA (14/10/2026)
+
+* **Por quê:** na rodada de 13/10 o `instalar.bat` instalou o Open WebUI, mas ele não funcionou (sem diagnóstico: o usuário não mandou o erro) e era pesado demais para só mostrar um chat (o pacote traz PyTorch e outros itens de busca em documentos, voz e usuários que não usamos). Decisão do usuário: uma página simples.
+* **O que existe:** `web/index.html` (uma página, menos de 200 linhas, sem bibliotecas nem acesso à internet) servida pela própria ponte em `/`. Mostra o progresso como citação, blocos de código, botões Sim/Não nas confirmações e guarda a conversa no navegador. O código é nosso (não foi copiado de nenhum serviço).
+* **Contexto da conversa:** a ponte manda ao agente um resumo das últimas 3 trocas (pedido e resposta final, até 300 caracteres cada; sem o progresso das ferramentas e com a resposta a uma confirmação ligada ao pedido original). `agent(prompt, context=...)` acrescenta isso depois de decidir o tipo da tarefa, para as palavras do histórico não virarem "tarefa de desenvolvimento".
+* **Instalação:** o passo 8 do instalador (Open WebUI) saiu; nada novo para baixar. `.venv-webui` e `data-webui` deixaram de existir.
+* **Verificação:** testes automáticos e uma conversa real no navegador (com um agente de mentira): progresso, bloco de código, confirmação por botão e mensagem seguinte com contexto. Falta testar com o 9b de verdade em casa.
+

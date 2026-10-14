@@ -4,8 +4,7 @@
 param(
     [switch]$DryRun,
     [switch]$SkipModel,
-    [switch]$SkipTests,
-    [switch]$SkipWeb
+    [switch]$SkipTests
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,7 +17,7 @@ New-Item -ItemType Directory -Force $LogDir | Out-Null
 $LogFile = Join-Path $LogDir "instalacao.log"
 try { Start-Transcript -Path $LogFile -Append | Out-Null } catch { }
 
-$TotalSteps = 8
+$TotalSteps = 7
 $Warnings = New-Object System.Collections.Generic.List[string]
 
 function Say([string]$Message, [string]$Color = "White") {
@@ -84,27 +83,6 @@ function Get-PythonCommand {
             if ($parts.Count -ge 2 -and [int]$parts[0] -ge 3 -and [int]$parts[1] -ge 10) {
                 return $name
             }
-        } catch { }
-    }
-
-    return $null
-}
-
-function Get-WebUiPython {
-    # O Open WebUI so funciona no Python 3.11 e 3.12 (o 3.13 quebra). Retorna o comando como lista, ou $null.
-    if (Have "py") {
-        foreach ($version in @("3.12", "3.11")) {
-            try {
-                & py "-$version" -c "import sys" *> $null
-                if ($LASTEXITCODE -eq 0) { return ,@("py", "-$version") }
-            } catch { }
-        }
-    }
-
-    if (Have "python") {
-        try {
-            $found = (& python -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null)
-            if ((@("3.11", "3.12")) -contains ("$found").Trim()) { return ,@("python") }
         } catch { }
     }
 
@@ -314,54 +292,6 @@ try {
         }
     }
 
-    # ---------------------------------------------------------------- 8. Interface web
-    Step 8 "Instalando a interface web (Open WebUI) dentro da pasta do projeto"
-    $webDir = Join-Path $Root ".venv-webui"
-    $webExe = Join-Path $webDir "Scripts\open-webui.exe"
-
-    if ($SkipWeb) {
-        Say "  Pulado (-SkipWeb)." "Yellow"
-    } elseif ($DryRun) {
-        Say "  (simulacao) python 3.12 -m venv .venv-webui" "Yellow"
-        Say "  (simulacao) pip install open-webui" "Yellow"
-    } elseif (Test-Path $webExe) {
-        Say "  Open WebUI ja instalado, reaproveitando." "Green"
-    } else {
-        $webPython = Get-WebUiPython
-
-        if (-not $webPython) {
-            Say "  Nao achei o Python 3.11 ou 3.12 (o Open WebUI nao funciona no 3.13). Vou instalar o Python 3.12 ao lado do que voce tem."
-            try { Winget-Install "Python.Python.3.12" "Python 3.12" } catch { Warn "Nao consegui instalar o Python 3.12: $_" }
-            $webPython = Get-WebUiPython
-        }
-
-        if (-not $webPython) {
-            Warn "A interface web nao foi instalada (falta o Python 3.11 ou 3.12). O agente no terminal funciona normalmente. Instale o Python 3.12 e rode instalar.bat de novo."
-        } else {
-            $webParts = @($webPython)
-            $webCommand = $webParts[0]
-            $webArguments = @()
-            if ($webParts.Count -gt 1) { $webArguments = $webParts[1..($webParts.Count - 1)] }
-
-            if (Test-Path $webDir) { Remove-Item -Recurse -Force $webDir }
-
-            Say "  Criando o ambiente .venv-webui e baixando o Open WebUI (alguns GB; pode levar de 5 a 15 minutos)..."
-            & $webCommand @webArguments -m venv $webDir
-
-            if ($LASTEXITCODE -eq 0) {
-                $webPip = Join-Path $webDir "Scripts\python.exe"
-                & $webPip -m pip install --disable-pip-version-check --upgrade pip
-                & $webPip -m pip install --disable-pip-version-check open-webui
-            }
-
-            if (Test-Path $webExe) {
-                Say "  Interface web instalada. Para usar: iniciar-web.bat" "Green"
-            } else {
-                Warn "A instalacao do Open WebUI falhou. O agente no terminal funciona normalmente. Envie a pasta logs (instalacao.log) para eu ver o erro."
-            }
-        }
-    }
-
     # ---------------------------------------------------------------- fim
     Say ""
     Say "=============================================" "Green"
@@ -375,7 +305,7 @@ try {
     Say ""
     Say "Para usar:      de duplo clique em  iniciar.bat"
     Say "So FAST:        de duplo clique em  iniciar-fast.bat   (nunca chama o SMART)"
-    Say "Interface web:  de duplo clique em  iniciar-web.bat    (Open WebUI + so FAST)"
+    Say "Chat no navegador: de duplo clique em  iniciar-web.bat  (so FAST, nada a instalar)"
     Say "Para conferir:  de duplo clique em  verificar.bat"
     Say "Manual:         abra o arquivo  LEIA-ME-WINDOWS.md"
 

@@ -62,18 +62,15 @@ SE O PC TRAVAR (tela congelada, tudo lento demais, precisou segurar o botao de l
   (O par-9b+gptoss20 e o perfil mais pesado: dois modelos que juntos nao cabem na placa.)
 
 
-NOVIDADE: USAR O AGENTE SO COM O FAST, NO TERMINAL OU NA INTERFACE WEB (opcional, nao e parte da rodada)
-- instalar.bat agora tambem instala o Open WebUI (pasta  .venv-webui , alguns GB, 5 a 15 minutos).
-  Ele precisa do Python 3.11 ou 3.12; se nao achar, instala o 3.12 ao lado do seu. Tudo fica dentro da
-  pasta do projeto: apagar a pasta apaga tambem a interface e as conversas (data-webui).
+NOVIDADE: USAR O AGENTE SO COM O FAST (opcional, nao e parte da rodada)
+- instalar.bat NAO baixa mais nada para isso (o Open WebUI foi trocado por uma pagina de chat propria).
 - iniciar-fast.bat   o agente no terminal, so com o FAST (nunca chama o SMART).
-- iniciar-web.bat    sobe a interface no navegador (http://127.0.0.1:8080), tambem so com o FAST.
-    * Escreva a tarefa no chat. O progresso (ferramentas usadas) aparece como citacao e depois a resposta.
-    * Quando o agente precisar de confirmacao (rodar comando, etc.) ele pergunta no chat:
-      responda  SIM  para executar ou  NAO  para cancelar.
-    * Uma tarefa por vez. Cada mensagem e uma tarefa nova (o agente nao lembra da conversa anterior).
-    * A primeira subida do Open WebUI e lenta (baixa arquivos); as seguintes sao rapidas.
-    * Ctrl+C na janela encerra tudo.
+- iniciar-web.bat    abre o chat no navegador (http://127.0.0.1:8765), tambem so com o FAST.
+    * Escreva a tarefa e aperte Enter. O progresso (ferramentas usadas) aparece como citacao e depois a resposta.
+    * Quando o agente precisar de confirmacao (rodar comando, etc.) aparecem os botoes  Sim  e  Nao.
+    * Uma tarefa por vez. O agente recebe um resumo das ultimas trocas como contexto.
+    * A conversa fica salva no navegador; "Nova conversa" limpa.
+    * Ctrl+C na janela encerra.
   Isto nao entra nas medicoes: se algo der errado, e so me dizer o que apareceu (a janela e a pasta logs).
 
 

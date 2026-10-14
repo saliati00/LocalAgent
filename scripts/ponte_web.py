@@ -1,13 +1,16 @@
 """
-Ponte entre o Open WebUI e o Harness: uma API no formato OpenAI (só o que o Open WebUI usa) que roda o agente.
+Ponte entre a página de chat (web/index.html) e o Harness: uma API no formato OpenAI que roda o agente.
 
+    GET  /                       a página de chat
     GET  /v1/models              um único "modelo": o LocalAgent
     POST /v1/chat/completions    a última mensagem do usuário vira a tarefa do agente
 
+- Um resumo das últimas trocas vai junto como contexto (o agente não guarda a conversa).
 - O progresso (ferramentas usadas e se deram certo) aparece no chat como citação; depois vem a resposta final.
 - Confirmações (rodar comando, instalar...) viram uma pergunta no chat: responda SIM ou NÃO na mensagem seguinte.
 - Uma tarefa por vez. Só escuta em 127.0.0.1.
 - Roda no modo só FAST (LOCALAGENT_SO_FAST), definido por quem inicia (scripts/iniciar_web.py).
+- Qualquer outro cliente que fale o formato OpenAI também funciona.
 """
 
 import argparse
@@ -33,7 +36,9 @@ YES = ("sim", "s", "ok", "yes", "y", "pode", "confirmo", "executar")
 
 LOG_LINE = re.compile(r"^\[\d{4}-\d\d-\d\d [\d:]+\] \[[0-9a-f]+\] (\w+)(?: \| (.*))?$")
 
-BACKGROUND_PREFIX = "### Task:"  # pedidos automáticos do Open WebUI (título, tags...): não são tarefas do agente
+PAGE = ROOT / "web" / "index.html"
+HISTORY_PAIRS = 3
+HISTORY_CHARS = 300
 
 
 def progress_line(event: str, details: str) -> str | None:
@@ -105,11 +110,11 @@ class Session:
         self.thread.join(timeout=0.5)  # a thread acabou de enviar "done" e está saindo
         return self.thread.is_alive()
 
-    def start(self, prompt: str) -> None:
+    def start(self, prompt: str, context: str = "") -> None:
         self.events = queue.Queue()
         self.answers = queue.Queue()
         self.waiting = False
-        self.thread = threading.Thread(target=self._work, args=(prompt,), daemon=True)
+        self.thread = threading.Thread(target=self._work, args=(prompt, context), daemon=True)
         self.thread.start()
 
     def answer(self, text: str) -> None:
@@ -128,7 +133,7 @@ class Session:
 
         return reply.strip().lower().strip(".!") in YES
 
-    def _work(self, prompt: str) -> None:
+    def _work(self, prompt: str, context: str = "") -> None:
         import agent
         from core.harness import permissions
 
@@ -137,7 +142,7 @@ class Session:
 
         try:
             with contextlib.redirect_stdout(LineWriter(lambda line: self.events.put(("text", line)))):
-                result = self.run_agent(prompt) or result
+                result = (self.run_agent(prompt, context=context) if context else self.run_agent(prompt)) or result
         except Exception as exc:  # noqa: BLE001 - qualquer erro vira mensagem no chat
             result = {"status": "failed", "response": f"Erro no agente: {exc}"}
         finally:
@@ -209,6 +214,41 @@ def last_user_text(messages: list) -> str:
     return ""
 
 
+def history_context(messages: list) -> str:
+    """Resumo curto das últimas trocas (pedido e resposta final), sem o progresso das ferramentas e sem as confirmações."""
+
+    pairs = []
+    pending_user = None
+    last_request = None
+
+    for message in (messages or [])[:-1]:  # a última é o pedido de agora
+        content = message.get("content")
+
+        if isinstance(content, list):
+            content = " ".join(part.get("text", "") for part in content if isinstance(part, dict))
+
+        content = (content or "").strip()
+
+        if message.get("role") == "user":
+            if last_request and content.lower().strip(".!") in YES + ("não", "nao", "n"):
+                pending_user = last_request  # a resposta a uma confirmação continua o pedido original
+            else:
+                pending_user = last_request = content
+        elif message.get("role") == "assistant" and pending_user is not None:
+            if "Responda **SIM**" not in content:
+                answer = " ".join(line for line in content.splitlines() if line.strip() and not line.lstrip().startswith(">"))
+                pairs.append((pending_user, answer))
+
+            pending_user = None
+
+    lines = []
+
+    for user, answer in pairs[-HISTORY_PAIRS:]:
+        lines.append(f"- Usuário: {user[:HISTORY_CHARS]}\n  Agente: {answer[:HISTORY_CHARS]}")
+
+    return "\n".join(lines)
+
+
 def make_handler(session: Session, resolve_prompt):
     class Handler(BaseHTTPRequestHandler):
         server_version = "LocalAgentBridge/1.0"
@@ -225,9 +265,21 @@ def make_handler(session: Session, resolve_prompt):
             self.wfile.write(body)
 
         def do_GET(self):
-            if self.path.rstrip("/") in ("/v1/models", "/models"):
+            if self.path in ("/", "/index.html"):
+                try:
+                    body = PAGE.read_bytes()
+                except OSError:
+                    self._json({"error": {"message": "web/index.html não encontrado"}}, 404)
+                    return
+
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            elif self.path.rstrip("/") in ("/v1/models", "/models"):
                 self._json({"object": "list", "data": [{"id": MODEL_ID, "object": "model", "created": 0, "owned_by": "localagent"}]})
-            elif self.path.rstrip("/") in ("", "/health", "/v1"):
+            elif self.path.rstrip("/") in ("/health", "/v1"):
                 self._json({"status": "ok", "busy": session.busy})
             else:
                 self._json({"error": {"message": "não encontrado"}}, 404)
@@ -244,14 +296,13 @@ def make_handler(session: Session, resolve_prompt):
                 self._json({"error": {"message": "pedido inválido"}}, 400)
                 return
 
-            text = last_user_text(request.get("messages"))
+            messages = request.get("messages")
+            text = last_user_text(messages)
             stream = bool(request.get("stream"))
             stream_id = "chatcmpl-" + uuid.uuid4().hex[:12]
 
             if not text:
                 self._reply(["Escreva a tarefa que o agente deve fazer."], stream, stream_id)
-            elif text.startswith(BACKGROUND_PREFIX):
-                self._reply(["LocalAgent"], stream, stream_id)  # título/tags automáticos: não rodam o agente
             else:
                 with session.lock:
                     if session.waiting:
@@ -266,7 +317,8 @@ def make_handler(session: Session, resolve_prompt):
                             self._reply(["Não encontrei esse prompt salvo."], stream, stream_id)
                             return
 
-                        session.start(prompt)
+                        # Pedidos comuns levam o resumo da conversa; tarefas numeradas e prompts salvos já são completos.
+                        session.start(prompt, history_context(messages) if prompt == text else "")
                         source = collect_reply(session)
 
                 if source is None:

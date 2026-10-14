@@ -1,4 +1,4 @@
-"""Modo só FAST e a ponte da interface web (Open WebUI)."""
+"""Modo só FAST e a ponte do chat no navegador."""
 
 import json
 import sys
@@ -156,9 +156,11 @@ def test_the_final_text_adds_a_note_when_the_task_did_not_finish():
 @pytest.fixture
 def bridge():
     calls = []
+    contexts = []
 
-    def fake_agent(prompt):
+    def fake_agent(prompt, context=""):
         calls.append(prompt)
+        contexts.append(context)
         print(log_line("TOOL", "list_directory | {'path': 'workspace'}"))
         print(log_line("RESULT", "list_directory | OK"))
 
@@ -173,7 +175,7 @@ def bridge():
     thread.start()
     base = f"http://127.0.0.1:{server.server_address[1]}"
 
-    yield SimpleNamespace(base=base, calls=calls, session=session)
+    yield SimpleNamespace(base=base, calls=calls, contexts=contexts, session=session)
 
     server.shutdown()
     server.server_close()
@@ -228,10 +230,78 @@ def test_a_confirmation_becomes_a_question_in_the_chat_and_the_next_message_answ
     assert expected in second and bridge.calls == ["confirme o programa"], "a resposta não pode virar uma tarefa nova"
 
 
-def test_the_assistant_s_automatic_requests_do_not_run_the_agent(bridge):
-    text = reply_text(post(bridge.base, "### Task:\nGenerate a concise title for this chat"))
+def test_the_bridge_serves_the_chat_page(bridge):
+    with urllib.request.urlopen(bridge.base + "/", timeout=10) as response:
+        page = response.read().decode("utf-8")
 
-    assert text == "LocalAgent" and bridge.calls == []
+    assert "<title>LocalAgent</title>" in page and "/v1/chat/completions" in page
+
+
+def test_the_page_is_small_and_loads_nothing_from_the_internet():
+    page = (PROJECT_ROOT / "web" / "index.html").read_text(encoding="utf-8")
+
+    assert len(page.splitlines()) < 200
+    assert "http://" not in page and "https://" not in page and "<script src" not in page
+
+
+def messages(*pairs):
+    out = []
+
+    for role, content in pairs:
+        out.append({"role": role, "content": content})
+
+    return out
+
+
+def test_the_history_keeps_requests_and_final_answers_but_not_progress_or_confirmations():
+    history = ponte_web.history_context(messages(
+        ("user", "crie a.txt com oi"),
+        ("assistant", "> 🔧 `write_file` {}\n>\n> ✓ ok\n>\n\nCriei o a.txt."),
+        ("user", "rode o programa"),
+        ("assistant", "Posso rodar?\n\nResponda **SIM** para executar"),
+        ("user", "sim"),
+        ("assistant", "Rodei: imprimiu oi."),
+        ("user", "agora apague aquele arquivo"),
+    ))
+
+    assert "crie a.txt com oi" in history and "Criei o a.txt." in history and "Rodei: imprimiu oi." in history
+    assert "write_file" not in history and "Responda" not in history and "Usuário: sim" not in history
+
+
+def test_the_history_is_short_and_empty_for_the_first_message():
+    assert ponte_web.history_context(messages(("user", "oi"))) == ""
+
+    many = []
+
+    for n in range(10):
+        many += [("user", f"pedido {n} " + "x" * 500), ("assistant", "ok " + "y" * 500)]
+
+    history = ponte_web.history_context(messages(*many, ("user", "agora")))
+
+    assert history.count("Usuário:") == ponte_web.HISTORY_PAIRS and len(history) < 2500 and "pedido 9" in history and "pedido 0" not in history
+
+
+def test_a_follow_up_request_reaches_the_agent_with_the_conversation_as_context(bridge):
+    body = json.dumps({"stream": False, "messages": messages(
+        ("user", "crie a.txt com oi"), ("assistant", "Criei o a.txt."), ("user", "agora apague o mesmo arquivo"))}).encode("utf-8")
+    request = urllib.request.Request(bridge.base + "/v1/chat/completions", data=body, headers={"Content-Type": "application/json"})
+    urllib.request.urlopen(request, timeout=30).read()
+
+    assert bridge.calls == ["agora apague o mesmo arquivo"]
+    assert "crie a.txt com oi" in bridge.contexts[0] and "Criei o a.txt." in bridge.contexts[0]
+
+
+def test_the_agent_receives_the_context_after_the_task_type_was_decided(tmp_path, monkeypatch):
+    seen = []
+    monkeypatch.setattr(agent.client, "chat", lambda *a, **k: seen.append(k["messages"][1]["content"]) or text_response("ok"))
+    monkeypatch.setattr(agent, "TASKS_DIR", tmp_path / "tasks")
+    monkeypatch.setattr(agent, "check_completion", lambda **k: {"status": "complete", "reason": "ok"})
+    capture_log(monkeypatch)
+
+    agent.agent("apague o arquivo", context="- Usuário: continue o desenvolvimento do checklist\n  Agente: feito")
+
+    assert "CONVERSA ANTERIOR" in seen[0] and "continue o desenvolvimento" in seen[0]
+    assert "ETAPA IMEDIATA DE DESENVOLVIMENTO" not in seen[0], "as palavras do histórico não podem virar tarefa de desenvolvimento"
 
 
 def test_a_new_task_while_another_runs_is_refused_politely(bridge):
@@ -257,22 +327,11 @@ def test_the_confirmation_hook_is_removed_when_the_task_ends(bridge):
 # Inicialização, instalador e limpeza
 # ---------------------------------------------------------
 
-def test_open_webui_is_configured_to_use_only_the_bridge_and_keep_data_inside_the_project():
-    env = iniciar_web.webui_environment(8765)
-
-    assert env["OPENAI_API_BASE_URL"] == "http://127.0.0.1:8765/v1" and env["ENABLE_OLLAMA_API"] == "False"
-    assert Path(env["DATA_DIR"]).resolve().parent == PROJECT_ROOT.resolve()
-    assert env["ENABLE_TITLE_GENERATION"] == "False" and env["ENABLE_TAGS_GENERATION"] == "False"
-    assert iniciar_web.webui_executable().resolve().is_relative_to(PROJECT_ROOT.resolve())
-
-
-def test_everything_the_web_interface_installs_stays_inside_the_project_and_out_of_git():
+def test_nothing_heavy_is_installed_for_the_chat():
     ignored = (PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8")
-    script = (PROJECT_ROOT / "scripts" / "setup_windows.ps1").read_text(encoding="utf-8")
+    script = (PROJECT_ROOT / "scripts" / "setup_windows.ps1").read_text(encoding="utf-8").lower()
 
-    assert ".venv-webui/" in ignored and "data-webui/" in ignored
-    assert "open-webui" in script and ".venv-webui" in script and "SkipWeb" in script
-    assert "3.12" in script and "3.11" in script, "o Open WebUI só funciona nesses Pythons"
+    assert "open-webui" not in script and "venv-webui" not in script and "venv-webui" not in ignored
 
 
 def test_the_launchers_exist_and_set_up_what_they_need():
@@ -280,12 +339,14 @@ def test_the_launchers_exist_and_set_up_what_they_need():
     web = (PROJECT_ROOT / "iniciar-web.bat").read_text(encoding="utf-8")
 
     assert "LOCALAGENT_SO_FAST=1" in fast and "agent.py" in fast
-    assert "iniciar_web.py" in web and ".venv-webui" in web
+    assert "iniciar_web.py" in web and "venv-webui" not in web
 
 
-@pytest.mark.parametrize("relative", ["iniciar-fast.bat", "iniciar-web.bat", "scripts/ponte_web.py", "scripts/iniciar_web.py"])
+@pytest.mark.parametrize("relative", ["iniciar-fast.bat", "iniciar-web.bat", "scripts/ponte_web.py", "scripts/iniciar_web.py", "web/index.html"])
 def test_the_new_launchers_and_bridge_are_protected_from_the_agent(relative):
     from tools.filesystem import PROTECTED_PATHS, write_file
 
-    assert (PROJECT_ROOT / relative).resolve() in PROTECTED_PATHS
-    assert write_file(str(PROJECT_ROOT / relative), "x")["success"] is False
+    target = (PROJECT_ROOT / relative).resolve()
+
+    assert any(p == target or p in target.parents for p in PROTECTED_PATHS)
+    assert write_file(str(target), "x")["success"] is False

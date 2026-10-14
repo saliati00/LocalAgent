@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LocalAgent</title>
+<style>
+  :root { --bg:#f6f6f4; --fg:#1d1d1f; --card:#fff; --user:#dbeafe; --line:#d8d8d4; --acc:#2563eb; --muted:#6b7280; --code:#ececea; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#17181a; --fg:#e8e8e6; --card:#222427; --user:#1e3a5f; --line:#33363a; --acc:#60a5fa; --muted:#9ca3af; --code:#2d3035; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui,sans-serif; display:flex; flex-direction:column; height:100vh; }
+  header { padding:10px 16px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:center; }
+  header b { flex:1; } header small { color:var(--muted); font-weight:400; }
+  main { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
+  .msg { max-width:min(760px,92%); padding:10px 14px; border-radius:12px; background:var(--card); border:1px solid var(--line); white-space:pre-wrap; word-wrap:break-word; }
+  .msg.user { align-self:flex-end; background:var(--user); border-color:transparent; }
+  .progress { color:var(--muted); font-size:14px; border-left:3px solid var(--line); padding-left:8px; margin:2px 0; }
+  pre { background:var(--code); padding:8px 10px; border-radius:8px; overflow-x:auto; margin:6px 0; }
+  code { background:var(--code); padding:1px 4px; border-radius:4px; font-family:ui-monospace,Consolas,monospace; font-size:14px; }
+  pre code { padding:0; background:none; }
+  form { display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--line); }
+  textarea { flex:1; resize:none; padding:10px; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--fg); font:inherit; max-height:160px; }
+  button { padding:8px 16px; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--fg); font:inherit; cursor:pointer; }
+  button.main { background:var(--acc); border-color:var(--acc); color:#fff; }
+  button:disabled { opacity:.5; cursor:default; }
+  .ask { display:flex; gap:8px; margin-top:8px; }
+</style>
+<header><b>LocalAgent <small>só FAST</small></b><button id="novo" type="button">Nova conversa</button></header>
+<main id="chat"></main>
+<form id="form"><textarea id="texto" rows="1" placeholder="Escreva a tarefa e aperte Enter (Shift+Enter quebra a linha)"></textarea><button id="enviar" class="main">Enviar</button></form>
+<script>
+const chat = document.getElementById('chat'), texto = document.getElementById('texto'), enviar = document.getElementById('enviar');
+let msgs = [], busy = false;
+try { msgs = JSON.parse(localStorage.getItem('localagent') || '[]'); } catch (e) {}
+const save = () => { try { localStorage.setItem('localagent', JSON.stringify(msgs)); } catch (e) {} };
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Markdown mínimo: bloco de código, `código`, **negrito** e linhas "> " de progresso. O texto é escapado antes.
+function fmt(text) {
+  return esc(text).split(/```\w*\n?/).map((part, i) => {
+    if (i % 2) return '<pre><code>' + part + '</code></pre>';
+    return part.split('\n').map(l => l.startsWith('&gt; ') ? '<div class="progress">' + l.slice(5) + '</div>' : l.trim() === '&gt;' ? '' : l + '\n').join('')
+      .replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  }).join('');
+}
+
+function render() {
+  chat.innerHTML = '';
+  msgs.forEach((m, i) => {
+    const div = document.createElement('div');
+    div.className = 'msg ' + m.role;
+    div.innerHTML = m.role === 'user' ? esc(m.content) : fmt(m.content);
+    if (m.role === 'assistant' && i === msgs.length - 1 && !busy && m.content.includes('Responda **SIM**')) {
+      const ask = document.createElement('div');
+      ask.className = 'ask';
+      [['Sim', 'sim'], ['Não', 'não']].forEach(([label, value]) => {
+        const b = document.createElement('button'); b.type = 'button'; b.textContent = label; if (value === 'sim') b.className = 'main';
+        b.onclick = () => send(value); ask.appendChild(b);
+      });
+      div.appendChild(ask);
+    }
+    chat.appendChild(div);
+  });
+  chat.scrollTop = chat.scrollHeight;
+}
+
+async function send(text) {
+  if (busy || !text.trim()) return;
+  busy = true; enviar.disabled = true;
+  msgs.push({ role: 'user', content: text }, { role: 'assistant', content: '' });
+  const answer = msgs[msgs.length - 1];
+  render();
+  try {
+    const r = await fetch('/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'localagent', stream: true, messages: msgs.slice(0, -1) }) });
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n'); buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ') || line.includes('[DONE]')) continue;
+        try { answer.content += JSON.parse(line.slice(6)).choices[0].delta.content || ''; } catch (e) {}
+      }
+      render();
+    }
+  } catch (e) { answer.content += '\n\n_Falha de conexão com a ponte: ' + e + '_'; }
+  busy = false; enviar.disabled = false; save(); render(); texto.focus();
+}
+
+document.getElementById('form').onsubmit = e => { e.preventDefault(); const t = texto.value; texto.value = ''; texto.style.height = 'auto'; send(t); };
+texto.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('form').requestSubmit(); } };
+texto.oninput = () => { texto.style.height = 'auto'; texto.style.height = texto.scrollHeight + 'px'; };
+document.getElementById('novo').onclick = () => { if (!busy) { msgs = []; save(); render(); } };
+render(); texto.focus();
+</script>

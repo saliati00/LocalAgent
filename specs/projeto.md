@@ -1564,7 +1564,7 @@ O conjunto automatizado atual possui testes para:
 O estado atual dos testes automatizados é:
 
 ```text
-786 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
+795 testes aprovados (e 21 testes de aceite que só rodam com -m aceite) (pytest, pasta tests/)
 ```
 
 Esses componentes ainda devem ser considerados **implementação inicial**, não arquitetura final.
@@ -1648,7 +1648,7 @@ Resumo das decisões em vigor. O histórico de cada rodada (evidências, compara
 * **Modelos:** FAST adotado: **qwen3.5:9b** com cache de KV em q8_0 e flash attention (`OLLAMA_KV_CACHE_TYPE=q8_0`, `OLLAMA_FLASH_ATTENTION=1`, configurados pelo `instalar.bat`): 50/56 (89%), raciocínio 12/12, ~63 tokens/s, 5,6 GB e 100% na GPU na comparação de 09/10/2026. Sem o q8_0 o mesmo modelo vaza para a CPU e quase esgota a RAM. Aposentados: qwen3:8b (bootstrap) e qwen3.5:4b (mais rápido, mas erra mais nas tarefas reais). SMART ainda em aberto: **gemma4:12b** (não carregou no perfil próprio por um erro passageiro de CUDA) e **gpt-oss:20b** (15/20, resultado contaminado por um defeito do Harness já corrigido). Fora: qwen3-coder:30b (não cabe em 16 GB de RAM) e os qwen2.5 de 14B (de 2024, descartados por idade).
 * **Como se decide:** pela bateria (`comparar.bat`), com veredito por código (teste oculto, execução do programa, teste de mutação), nunca por um modelo julgando. Os resultados vão para `specs/avaliacoes.md` (`scripts/registrar_avaliacoes.py`).
 * **Escopo:** todas as fases continuam valendo, inclusive a FASE 3 (Ollama x llama.cpp e quantização; o ganho buscado é mais contexto na mesma placa) e a FASE 10 (GUI e visão). Isto revoga o "cortar a FASE 10" do capítulo 43 do histórico.
-* **Interface web:** Open WebUI (capítulo 25). Primeira versão pronta, ainda não testada com o Open WebUI de verdade: `iniciar-web.bat` sobe a ponte (`scripts/ponte_web.py`, API no formato OpenAI, confirmações pelo chat) e o Open WebUI (`.venv-webui`, dados em `data-webui/`), sempre no modo só FAST (`LOCALAGENT_SO_FAST=1`, também em `iniciar-fast.bat`). O padrão do Harness (FAST chama o SMART) não muda. O instalador também baixa o Open WebUI.
+* **Interface web:** página de chat própria (`web/index.html`, menos de 200 linhas, sem dependências), servida pela ponte (`scripts/ponte_web.py`, API no formato OpenAI, confirmações com botões Sim/Não, resumo das últimas trocas como contexto). `iniciar-web.bat` abre no navegador, sempre no modo só FAST (`LOCALAGENT_SO_FAST=1`, também em `iniciar-fast.bat`); o padrão do Harness (FAST chama o SMART) não muda. O Open WebUI foi testado e descartado em 14/10/2026 (pesado e não funcionou); como a ponte fala o formato OpenAI, ele ou outro cliente pode ser ligado a ela depois.
 * **Ordem de trabalho:** (1) rodada SMART em casa (com o FAST confirmado e o contexto de 16k medido), para decidir o SMART; (2) em paralelo, no PC de trabalho, o que não depende de GPU (Open WebUI, busca de modelos, staging e rollback); (3) FASE 3: llama.cpp e quantização; (4) FASE 10.
 * **Autonomia:** o agente faz bem tarefas pequenas e ainda não conduz desenvolvimento de vários passos; isso depende do SMART. Se nenhum SMART passar, as alternativas registradas são: uso supervisionado, "SMART manual" (um resumo pronto para colar num chat externo), 32 GB de RAM ou uma API paga no futuro.
 

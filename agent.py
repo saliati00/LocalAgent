@@ -833,7 +833,7 @@ def is_malformed_tool_call(error: Exception) -> bool:
     return "error parsing tool call" in text or "XML syntax error" in text
 
 
-def agent(prompt: str):
+def agent(prompt: str, context: str = ""):
 
     # =========================================================
     # RESTRIÇÕES DA TAREFA
@@ -910,6 +910,13 @@ Instruções para cumprir esta etapa:
     else:
         effective_goal = prompt
         user_prompt_text = prompt
+
+    if context.strip():
+        # Só para referência (interface web). Entra depois das decisões acima, para não mudar o tipo da tarefa.
+        user_prompt_text += (
+            "\n\nCONVERSA ANTERIOR (apenas para entender referências como 'o mesmo', 'aquele arquivo'; "
+            "faça somente o pedido acima):\n" + context.strip()
+        )
 
     # =========================================================
     # RESUMO ESTRUTURADO DO PROJETO
