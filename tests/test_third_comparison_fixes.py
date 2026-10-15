@@ -263,7 +263,7 @@ def test_the_fast_decision_is_recorded_with_the_server_settings_it_needs():
 
     assert registry["active_fast_model"] == "qwen3.5:9b" and fast["status"] == "adopted"
     assert fast["server_env"] == cmp.KV8
-    assert "20261009_200900" in fast["justification"]
+    assert "20261014_231448" in fast["justification"] and "q8_0" in fast["justification"]
     assert registry["active_smart_model"] is None, "o SMART ainda não foi decidido"
 
 
