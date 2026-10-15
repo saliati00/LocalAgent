@@ -471,3 +471,24 @@ Rodada `logs/comparacao/20261013_220629` (commit c64f64a, Ollama 0.40.3, ~1 h 30
 * Cada perfil com servidor próprio agora começa descarregando tudo do Ollama normal (um modelo esquecido ali com keep-alive de 5 min ocupa VRAM e RAM).
 * Critério de leitura: o SMART só serve se passar onde o FAST falha (tarefas reais e tarefa 3) sem as quedas de carregamento contaminando; o par 9b + gemma já passou a tarefa 3 uma vez (16 casos).
 
+# 67. QUINTA RODADA, A PRIMEIRA LIMPA (14/10/2026)
+
+Rodada `logs/comparacao/20261014_231448` (commit 16b3e3c, Ollama 0.40.4, ~2 h 30 min, `comparar-tudo-confirmado.bat`). **Nenhuma queda de carregamento** (0 erros de CUDA em todos os perfis; o Ollama foi atualizado para 0.40.4, mas a causa das quedas da rodada 4 continua não confirmada) e nenhuma violação de arquivo protegido.
+
+| Perfil | Aprovação | Raciocínio | Tarefas reais | Tarefas num. | Tarefa 3 | tok/s | Observação |
+|---|---|---|---|---|---|---|---|
+| 9b-kv8 (FAST) | 53/56 (95%) | 12/12 | 17/20 | 4/4 | passou | 63 | 100% na GPU |
+| 9b-16k-kv8 | 50/56 (89%) | 10/12 | 17/20 | 4/4 | falhou | 43 | 15% na CPU |
+| s-gptoss20 | 18/20 (90%) | 6/6 | 8/10 | 4/4 | falhou | 31 | 130 s por caso, 56% na CPU |
+| s-gemma12 | 15/18 (83%) | 5/6 | 8/10 | 2/2 | - | 28 | interrompido: 178 MB de RAM livre |
+| par-9b+gemma12 | 14/14 | - | 10/10 | 4/4 | falhou | 62 | escalou só na tarefa 3 |
+| par-9b+gptoss20 | 13/14 | - | 10/10 | 3/4 | falhou | 62 | escalou em 2 casos |
+
+* **FAST:** o 9b-kv8 repete a rodada 2 (89% → 95%). O 16k não ajudou (89%, mais lento, parte na CPU): a nota de 98% da rodada 4 vinha de descartar os casos que caíram, um viés. Contexto fica em 8192.
+* **Nenhum SMART superou o FAST.** Nas tarefas reais, o FAST faz 17/20 e cada SMART sozinho 8/10; os SMART falham `resumo-de-csv`, `escrever-testes` e a tarefa 3, os mesmos casos em que o FAST oscila. O gemma ainda errou uma conta (77 em vez de 75).
+* **As cascatas não provam valor do SMART.** Os 10/10 vieram sem escalada: só `corrigir-soma` (gpt-oss) e a tarefa 3 escalaram; nos três casos que o FAST sozinho erra uma vez em duas (`implementar-slugify`, `resumo-de-csv`, `escrever-testes`) o 9b acertou sozinho, com uma só repetição (sorte provável). Na tarefa 3, onde o SMART mais importa, as duas cascatas falharam (gemma: cancelado; gpt-oss: 3 escalonamentos, falhou).
+* **Memória:** gemma sozinho esgotou a RAM (178 MB livres), o que na rodada de 09/10 já tinha acontecido com o 9b sem q8_0. O vigia o interrompeu antes de travar. A tarefa 3 foi passada só pelo 9b-kv8 (uma vez; em rodadas anteriores a cascata com gemma a passou uma vez).
+* **Leitura honesta:** com estes modelos, esta máquina (8 GB de VRAM, 16 GB de RAM) e este harness, o SMART local não acrescenta nada mensurável; o limite parece ser a tarefa de vários passos (tarefa 3), que nenhum modelo faz de forma confiável. Amostras pequenas (uma repetição por caso nos SMART).
+* **Registro:** `specs/avaliacoes.md` gerado; checklist: "Testar modelo" e "Comparar configurações" (FASE 2) e "Executar benchmark SMART" (FASE 7) marcados. O SMART não foi adotado nem rejeitado formalmente: decisão do usuário.
+* **Opções para o SMART:** (a) seguir só com o FAST, como já está o `iniciar-web.bat`; (b) SMART manual (resumo pronto para colar num chat externo); (c) mais RAM (32 GB) para modelos maiores; (d) API paga depois; (e) repetir a tarefa 3 com mais repetições para medir a taxa de acerto do FAST e dos pares.
+

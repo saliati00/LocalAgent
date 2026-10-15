@@ -22,7 +22,7 @@
       "context_window": 262144,
       "status": "adopted",
       "description": "Candidato a FAST: o mais preciso nas comparações (raciocínio 11/12).",
-      "justification": "Terceira comparação (09/10/2026, logs/comparacao/20261009_200900): com o cache de KV em q8_0 e flash attention (perfil 9b-kv8) passou 50/56 (89%), raciocínio 12/12, segurança 9/9, ~63 tokens/s, 5,6 GB e 100% na GPU. Sem o cache q8_0 o mesmo modelo usa 6,4 GB, vaza 12% para a CPU e quase esgota a RAM. Exige OLLAMA_FLASH_ATTENTION=1 e OLLAMA_KV_CACHE_TYPE=q8_0 (o instalar.bat configura).",
+      "justification": "FAST adotado. Rodada limpa de 14/10/2026 (logs/comparacao/20261014_231448, Ollama 0.40.4, sem quedas): perfil 9b-kv8 53/56 (95%), raciocínio 12/12, tarefas reais 17/20, segurança 9/9, tarefas numeradas 4/4, ~63 tokens/s, 5,6 GB e 100% na GPU. Com 16k de contexto (9b-16k-kv8): 50/56 (89%), 43 tokens/s e 15% na CPU, sem ganho: o contexto fica em 8192. Exige OLLAMA_FLASH_ATTENTION=1 e OLLAMA_KV_CACHE_TYPE=q8_0 (o instalar.bat configura).",
       "server_env": {
         "OLLAMA_FLASH_ATTENTION": "1",
         "OLLAMA_KV_CACHE_TYPE": "q8_0"
@@ -49,7 +49,7 @@
       "context_window": 262144,
       "status": "candidate",
       "description": "Candidato a SMART denso; o mais provável de caber quase inteiro na RTX 3070.",
-      "justification": "Terceira comparação (09/10/2026): no perfil próprio o servidor caiu ao carregar (erro de CUDA, 0xc0000409); no par com o qwen3.5:9b carregou e destravou 2 tarefas. Precisa de uma rodada própria."
+      "justification": "Rodada limpa de 14/10/2026: sozinho 15/18 (83%; tarefas reais 8/10, erro de conta no conta-dois-passos), ~28 tokens/s; o perfil foi interrompido com 178 MB de RAM livre (risco de travar o PC). Em par com o 9b: 14/14, mas só escalou na tarefa 3, que falhou. Não supera o FAST nas tarefas reais."
     },
     "gpt-oss:20b": {
       "name": "gpt-oss 20B",
@@ -60,7 +60,7 @@
       "context_window": 131072,
       "status": "candidate",
       "description": "Candidato a SMART MoE (poucos parâmetros ativos por token).",
-      "justification": "Terceira comparação (09/10/2026): 15/20 nos grupos difíceis (raciocínio 6/6, tarefas reais 5/10), ~30 tokens/s, 56% na CPU. Resultado contaminado: o Harness mandava escolher o SMART no meio das tarefas (corrigido); 3 casos alteraram o registry por isso. Precisa de nova rodada."
+      "justification": "Rodada limpa de 14/10/2026: sozinho 18/20 (90%; raciocínio 6/6, tarefas reais 8/10), ~31 tokens/s mas 130 s por caso e 56% na CPU; falhou resumo-de-csv, escrever-testes e a tarefa 3 (os mesmos que o FAST erra). Em par com o 9b: 13/14, escalou em 2 casos e a tarefa 3 falhou. Não supera o FAST nas tarefas reais."
     }
   }
 }

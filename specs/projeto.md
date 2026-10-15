@@ -1209,8 +1209,8 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [x] Baixar modelo
 * [ ] Preparar quantização
 * [ ] Gerar quantização inicial
-* [ ] Testar modelo
-* [ ] Comparar configurações
+* [x] Testar modelo
+* [x] Comparar configurações
 * [ ] Instalar versão escolhida
 * [ ] Registrar resultado
 
@@ -1302,7 +1302,7 @@ O checklist representa objetivos do projeto, não necessariamente a melhor ordem
 * [ ] Filtrar candidatos
 * [x] Baixar candidatos
 * [x] Executar benchmark FAST
-* [ ] Executar benchmark SMART
+* [x] Executar benchmark SMART
 * [x] Comparar com baseline
 * [x] Registrar resultados
 * [x] Criar sistema de candidatos
@@ -1650,5 +1650,6 @@ Resumo das decisões em vigor. O histórico de cada rodada (evidências, compara
 * **Escopo:** todas as fases continuam valendo, inclusive a FASE 3 (Ollama x llama.cpp e quantização; o ganho buscado é mais contexto na mesma placa) e a FASE 10 (GUI e visão). Isto revoga o "cortar a FASE 10" do capítulo 43 do histórico.
 * **Interface web:** página de chat própria (`web/index.html`, menos de 200 linhas, sem dependências), servida pela ponte (`scripts/ponte_web.py`, API no formato OpenAI, confirmações com botões Sim/Não, resumo das últimas trocas como contexto). `iniciar-web.bat` abre em `http://agent.localhost:8765` no navegador (a ponte só aceita esses nomes do próprio PC), sempre no modo só FAST (`LOCALAGENT_SO_FAST=1`, também em `iniciar-fast.bat`); o padrão do Harness (FAST chama o SMART) não muda. O Open WebUI foi testado e descartado em 14/10/2026 (pesado e não funcionou); como a ponte fala o formato OpenAI, ele ou outro cliente pode ser ligado a ela depois.
 * **Ordem de trabalho:** (1) rodada SMART em casa (com o FAST confirmado e o contexto de 16k medido), para decidir o SMART; (2) em paralelo, no PC de trabalho, o que não depende de GPU (Open WebUI, busca de modelos, staging e rollback); (3) FASE 3: llama.cpp e quantização; (4) FASE 10.
+* **SMART (rodada limpa de 14/10/2026):** nenhum candidato superou o FAST. Em tarefas reais: FAST 17/20, gemma4:12b 8/10, gpt-oss:20b 8/10; falham nos mesmos casos que o FAST e na tarefa 3. Nas cascatas o FAST quase nunca escala (3 casos) e, quando escala na tarefa 3, não resolve. Decisão do SMART pendente do usuário (capítulo 67 do histórico).
 * **Autonomia:** o agente faz bem tarefas pequenas e ainda não conduz desenvolvimento de vários passos; isso depende do SMART. Se nenhum SMART passar, as alternativas registradas são: uso supervisionado, "SMART manual" (um resumo pronto para colar num chat externo), 32 GB de RAM ou uma API paga no futuro.
 
